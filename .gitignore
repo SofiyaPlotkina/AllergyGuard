@@ -1,0 +1,9 @@
+# Datenbanken ignorieren
+*.db
+
+# Python-Cache ignorieren
+__pycache__/
+*.pyc
+
+# Venv
+venv/
