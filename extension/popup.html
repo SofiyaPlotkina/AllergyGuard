@@ -2,21 +2,324 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>AllergenGuard</title>
+    <title>AllergyGuard</title>
     <style>
-        body { width: 320px; padding: 15px; font-family: sans-serif; background-color: #f9f9f9; }
-        button { width: 100%; padding: 12px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
-        button:hover { background-color: #45a049; }
-        #resultText { margin-top: 15px; background: white; padding: 10px; border-radius: 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { width: 340px; font-family: -apple-system, sans-serif; background: #f5f5f5; color: #222; }
+
+        .header {
+            background: #2c7a2c;
+            color: white;
+            padding: 12px 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .header h1 { font-size: 16px; font-weight: 700; }
+        .header .profile-badge {
+            margin-left: auto;
+            font-size: 12px;
+            background: rgba(255,255,255,0.2);
+            padding: 3px 8px;
+            border-radius: 10px;
+            cursor: pointer;
+        }
+
+        .tabs {
+            display: flex;
+            background: white;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        .tab {
+            flex: 1;
+            padding: 9px 4px;
+            font-size: 12px;
+            text-align: center;
+            cursor: pointer;
+            color: #777;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: color 0.15s;
+        }
+        .tab.active { color: #2c7a2c; border-bottom-color: #2c7a2c; font-weight: 600; }
+        .tab:hover:not(.active) { color: #444; }
+
+        .panel { display: none; padding: 14px; }
+        .panel.active { display: block; }
+
+        /* Scan Panel */
+        .scan-hint {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 10px;
+            line-height: 1.4;
+        }
+        .btn-primary {
+            width: 100%;
+            padding: 11px;
+            background: #2c7a2c;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 15px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .btn-primary:hover { background: #256325; }
+        .btn-primary:disabled { background: #aaa; cursor: default; }
+
+        /* Eingabe Panel */
+        .input-area {
+            width: 100%;
+            height: 120px;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 13px;
+            resize: vertical;
+            font-family: inherit;
+        }
+        .input-area:focus { outline: none; border-color: #2c7a2c; }
+        .btn-secondary {
+            width: 100%;
+            margin-top: 8px;
+            padding: 10px;
+            background: #2c7a2c;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .btn-secondary:hover { background: #256325; }
+
+        /* Ergebnis */
+        #resultBox { margin-top: 12px; }
+        .result-card {
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+        }
+        .result-banner {
+            padding: 12px 14px;
+            font-size: 17px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .result-banner.gefahr { background: #fde8e8; color: #c0392b; border-left: 4px solid #c0392b; }
+        .result-banner.warnung { background: #fff3cd; color: #856404; border-left: 4px solid #ffc107; }
+        .result-banner.sicher  { background: #e8f5e9; color: #1b5e20; border-left: 4px solid #2e7d32; }
+
+        .result-body { padding: 10px 14px; font-size: 13px; line-height: 1.5; }
+        .result-body .label { font-weight: 600; color: #444; }
+        .result-body .found-term {
+            display: inline-block;
+            background: #fde8e8;
+            color: #c0392b;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 12px;
+        }
+        .result-body .found-term.warn { background: #fff3cd; color: #856404; }
+
+        .result-context {
+            font-size: 12px;
+            color: #555;
+            background: #f9f9f9;
+            padding: 6px 10px;
+            border-radius: 4px;
+            margin-top: 6px;
+            word-break: break-word;
+            border-left: 3px solid #ddd;
+        }
+
+        /* Verlauf */
+        .history-list { display: flex; flex-direction: column; gap: 8px; }
+        .history-item {
+            background: white;
+            border-radius: 6px;
+            padding: 9px 11px;
+            font-size: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .history-item:hover { background: #f0f0f0; }
+        .history-dot {
+            width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+        }
+        .history-dot.gefahr { background: #c0392b; }
+        .history-dot.warnung { background: #ffc107; }
+        .history-dot.sicher  { background: #2e7d32; }
+        .history-info { flex: 1; min-width: 0; }
+        .history-site { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .history-date { color: #999; font-size: 11px; }
+        .history-empty { color: #999; font-size: 13px; text-align: center; padding: 20px 0; }
+
+        /* Profil */
+        .profile-form label { display: block; font-size: 12px; font-weight: 600; color: #444; margin-bottom: 4px; margin-top: 10px; }
+        .profile-form input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+        .profile-form input:focus { outline: none; border-color: #2c7a2c; }
+
+        /* Allergen-Auswahl */
+        .allergen-label-row {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-top: 10px; margin-bottom: 4px;
+        }
+        .allergen-label-row span { font-size: 12px; font-weight: 600; color: #444; }
+        .search-toggle {
+            background: none; border: none; cursor: pointer;
+            font-size: 15px; padding: 2px 4px; border-radius: 4px;
+            color: #555; line-height: 1;
+        }
+        .search-toggle:hover { background: #eee; }
+
+        .allergen-search-wrap {
+            display: none;
+            margin-bottom: 6px;
+        }
+        .allergen-search-wrap.open { display: block; }
+        .allergen-search-input {
+            width: 100%; padding: 6px 8px;
+            border: 1px solid #2c7a2c; border-radius: 6px;
+            font-size: 13px; outline: none;
+        }
+
+        /* Häufigste Allergene – Quick-Buttons */
+        .top-allergens {
+            display: flex; flex-wrap: wrap; gap: 5px;
+            margin-bottom: 8px;
+        }
+        .top-btn {
+            padding: 4px 10px; border-radius: 12px; font-size: 12px;
+            border: 1.5px solid #ccc; background: white;
+            cursor: pointer; color: #333; white-space: nowrap;
+            transition: all 0.12s;
+        }
+        .top-btn:hover { border-color: #2c7a2c; color: #2c7a2c; }
+        .top-btn.selected {
+            background: #2c7a2c; border-color: #2c7a2c;
+            color: white; font-weight: 600;
+        }
+
+        /* Volle Allergen-Liste scrollbar */
+        .allergen-list-wrap {
+            max-height: 120px; overflow-y: auto;
+            border: 1px solid #e0e0e0; border-radius: 6px;
+            background: white;
+        }
+        .allergen-list-wrap::-webkit-scrollbar { width: 5px; }
+        .allergen-list-wrap::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+        .allergen-row {
+            display: flex; align-items: center; gap: 8px;
+            padding: 6px 10px; cursor: pointer; font-size: 13px;
+            border-bottom: 1px solid #f0f0f0;
+            transition: background 0.1s;
+        }
+        .allergen-row:last-child { border-bottom: none; }
+        .allergen-row:hover { background: #f5faf5; }
+        .allergen-row input[type=checkbox] { accent-color: #2c7a2c; width: 14px; height: 14px; cursor: pointer; }
+        .allergen-row .a-emoji { font-size: 15px; width: 20px; text-align: center; }
+        .allergen-row .a-name { flex: 1; }
+        .allergen-row .a-sub { font-size: 11px; color: #999; }
+        .allergen-row.hidden { display: none; }
+
+        .btn-save {
+            width: 100%;
+            margin-top: 14px;
+            padding: 10px;
+            background: #2c7a2c;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .btn-save:hover { background: #256325; }
+        .save-msg { margin-top: 8px; font-size: 12px; color: #2c7a2c; text-align: center; }
+
+        .loading { color: #888; font-size: 13px; text-align: center; padding: 10px 0; }
     </style>
 </head>
 <body>
-    <h3 style="margin-top: 0;">AllergenGuard 🛡️</h3>
-    <p style="font-size: 13px; color: #555;">Markiere die Zutaten auf der Webseite oder klicke direkt auf Prüfen (liest alles).</p>
-    
-    <button id="checkButton">🔍 Rezept prüfen</button>
-    <p id="resultText">Wartet auf Eingabe...</p>
-    
+    <div class="header">
+        <span style="font-size:20px;">🛡️</span>
+        <h1>AllergyGuard</h1>
+        <span class="profile-badge" id="profileBadge">Lade...</span>
+    </div>
+
+    <div class="tabs">
+        <div class="tab active" data-tab="scan">🔍 Scan</div>
+        <div class="tab" data-tab="eingabe">✏️ Eingabe</div>
+        <div class="tab" data-tab="verlauf">📋 Verlauf</div>
+        <div class="tab" data-tab="profil">👤 Profil</div>
+    </div>
+
+    <!-- Scan -->
+    <div class="panel active" id="tab-scan">
+        <p class="scan-hint">Liest automatisch die Zutaten der aktuellen Webseite und prüft auf deine Allergene.</p>
+        <button class="btn-primary" id="checkButton">🔍 Seite jetzt prüfen</button>
+        <div id="resultBox"></div>
+    </div>
+
+    <!-- Eingabe -->
+    <div class="panel" id="tab-eingabe">
+        <p class="scan-hint">Füge hier einen Zutatentext oder Verpackungstext manuell ein:</p>
+        <textarea class="input-area" id="manualText" placeholder="z.B. Zutaten: Weizenmehl, Zucker, Butter, Erdnüsse, Salz..."></textarea>
+        <button class="btn-secondary" id="checkManualButton">✅ Text prüfen</button>
+        <div id="resultBoxManual"></div>
+    </div>
+
+    <!-- Verlauf -->
+    <div class="panel" id="tab-verlauf">
+        <div id="historyList"><p class="history-empty">Noch keine Prüfungen gespeichert.</p></div>
+    </div>
+
+    <!-- Profil -->
+    <div class="panel" id="tab-profil">
+        <div class="profile-form">
+            <label>Dein Name</label>
+            <input type="text" id="profileName" placeholder="z.B. Max">
+
+            <div class="allergen-label-row">
+                <span>Allergie / Unverträglichkeit</span>
+                <button class="search-toggle" id="allergenSearchToggle" title="Allergen suchen">🔍</button>
+            </div>
+
+            <div class="allergen-search-wrap" id="allergenSearchWrap">
+                <input class="allergen-search-input" id="allergenSearchInput" placeholder="Allergen suchen…" autocomplete="off">
+            </div>
+
+            <!-- Häufigste Allergene als Schnellauswahl -->
+            <div class="top-allergens" id="topAllergens"></div>
+
+            <!-- Vollständige Liste -->
+            <div class="allergen-list-wrap">
+                <div id="allergenList"></div>
+            </div>
+
+            <!-- Freitext-Feld (wird automatisch befüllt, kann manuell ergänzt werden) -->
+            <label style="margin-top:10px;">Ausgewählt / eigene Eingabe</label>
+            <input type="text" id="profileAllergy" placeholder="z.B. Erdnuss, Milch, Gluten">
+        </div>
+        <button class="btn-save" id="saveProfileButton">💾 Profil speichern</button>
+        <p class="save-msg" id="saveMsg"></p>
+    </div>
+
     <script src="popup.js"></script>
 </body>
 </html>
