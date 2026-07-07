@@ -623,6 +623,233 @@ OFF_TAG_MAP = {
     "en:sulphur-dioxide-and-sulphites": "sulfite",
 }
 
+# ── Ersatzvorschläge pro gefundenem Begriff ──────────────────────────────────
+# Schlüssel: Substring (Kleinschreibung) der im Text gefunden wurde
+# Wert: Liste von Ersatzvorschlägen (wird dem Nutzer angezeigt)
+ERSATZ: dict[str, list[str]] = {
+    # Erdnuss
+    "erdnuss":        ["Sonnenblumenöl", "Mandelmus (falls keine Nussallergie)", "Sonnenblumenbutter"],
+    "erdnussöl":      ["Sonnenblumenöl", "Rapsöl", "Avocadoöl"],
+    "erdnussbutter":  ["Sonnenblumenbutter", "Reismehlpaste", "Kürbiskernmus"],
+    "erdnusspaste":   ["Sonnenblumenbutter", "Kürbiskernmus"],
+    "peanut":         ["Sunflower seed butter", "Sunflower oil", "Coconut oil"],
+    "peanut butter":  ["Sunflower seed butter", "Pumpkin seed butter"],
+    "peanut oil":     ["Sunflower oil", "Rapeseed oil", "Avocado oil"],
+    "groundnut":      ["Sunflower oil", "Rapeseed oil"],
+    "satay":          ["Kürbiskern-Sauce", "Tahini-Dressing (falls kein Sesam)", "Sonnenblumenbutter-Sauce"],
+    "arachis":        ["Sonnenblumenöl", "Rapsöl"],
+
+    # Milch
+    "milch":          ["Hafermilch", "Mandelmilch (falls keine Nussallergie)", "Reismilch", "Kokosdrink"],
+    "butter":         ["Margarine (pflanzlich)", "Kokosöl", "Avocadoöl", "Olivenöl"],
+    "butterschmalz":  ["Kokosöl", "Pflanzliches Bratfett"],
+    "ghee":           ["Kokosöl", "Pflanzliches Bratfett"],
+    "sahne":          ["Hafersahne", "Kokosmilch (Vollfett)", "Cashewsahne"],
+    "schlagsahne":    ["Kokosmilch (gekühlt, aufschlagen)", "Haferschlagsahne"],
+    "creme fraiche":  ["Cashew-Crème (eingeweicht & gemixt)", "Sojajoghurt"],
+    "crème fraîche":  ["Cashew-Crème (eingeweicht & gemixt)", "Sojajoghurt"],
+    "schmand":        ["Sojajoghurt", "Kokosmilch-Creme"],
+    "käse":           ["Hefeflocken + Cashewcreme", "Veganer Käseersatz"],
+    "mozzarella":     ["Veganer Mozzarella (Cashewbasis)", "Tofu natur (abgetropft)"],
+    "parmesan":       ["Hefeflocken", "Cashew-Parmesan (Cashew + Hefe + Salz gemahlen)"],
+    "frischkäse":     ["Cashew-Frischkäse", "Sojafrischkäse"],
+    "ricotta":        ["Tofu natur (zerkrümelt)", "Cashew-Ricotta"],
+    "mascarpone":     ["Cashew-Mascarpone", "Kokoscreme"],
+    "joghurt":        ["Sojajoghurt", "Kokosjoghurt", "Haferjoghurt"],
+    "yogurt":         ["Soy yogurt", "Coconut yogurt", "Oat yogurt"],
+    "quark":          ["Sojajoghurt (abgetropft)", "Cashew-Quark"],
+    "kasein":         ["Erbsenprotein", "Reisprotein"],
+    "casein":         ["Pea protein", "Rice protein"],
+    "molke":          ["Erbsenprotein-Pulver", "Hanfprotein"],
+    "whey":           ["Pea protein powder", "Hemp protein", "Rice protein"],
+    "laktose":        ["Laktaseenzym verwenden", "Laktosefreie Alternative"],
+    "lactose":        ["Lactase enzyme", "Lactose-free alternative"],
+    "milk":           ["Oat milk", "Rice milk", "Coconut drink", "Almond milk"],
+    "cream":          ["Oat cream", "Coconut cream", "Cashew cream"],
+    "ice cream":      ["Sorbet", "Nice cream (gefrorene Banane)", "Kokoseis"],
+    "eiscreme":       ["Sorbet", "Bananencreme (gefrorene Banane)", "Kokoseis"],
+
+    # Ei
+    "eigelb":         ["1 EL Leinsamengel (1 EL Leinsamen + 3 EL Wasser)", "Aquafaba (3 EL)"],
+    "eiklar":         ["Aquafaba (Kichererbsenwasser, 3 EL = 1 Eiklar)", "Agar-Agar-Schaum"],
+    "eiweiß":         ["Aquafaba", "Erbsenprotein"],
+    "vollei":         ["Leinsamen-Ei (1 EL gemahlen + 3 EL Wasser)", "Chia-Ei", "Apfelmus (60 g = 1 Ei)"],
+    "ei,":            ["Leinsamen-Ei", "Chia-Ei (1 EL + 3 EL Wasser)", "Apfelmus (60 g)"],
+    " ei ":           ["Leinsamen-Ei", "Chia-Ei (1 EL + 3 EL Wasser)", "Apfelmus (60 g)"],
+    "mayonnaise":     ["Vegane Mayo (Aquafaba-Basis)", "Avocadocreme", "Hummus"],
+    "mayo":           ["Vegane Mayo", "Avocadocreme"],
+    "aioli":          ["Veganes Aioli (Aquafaba + Knoblauch + Öl)", "Sojajoghurt + Knoblauch"],
+    "hollandaise":    ["Vegane Hollandaise (Cashew- oder Silkentofubasis)"],
+    "meringue":       ["Aquafaba-Baiser (Kichererbsenwasser aufschlagen)"],
+    "baiser":         ["Aquafaba-Baiser"],
+    "eiernudeln":     ["Glutenfreie Reisnudeln", "Buchweizennudeln", "Linsen-Pasta"],
+    "egg":            ["Flax egg (1 tbsp ground flax + 3 tbsp water)", "Chia egg", "Applesauce (60g)", "Aquafaba (3 tbsp)"],
+    "egg white":      ["Aquafaba (3 tbsp per egg white)", "Agar foam"],
+    "egg yolk":       ["Flax egg", "Sunflower lecithin (emulsifier)"],
+
+    # Gluten
+    "weizenmehl":     ["Reismehl", "Buchweizenmehl", "Mandelmehl (falls keine Nussallergie)", "Kichererbsenmehl", "Hafermehl (glutenfrei zertifiziert)"],
+    "mehl":           ["Reismehl", "Kichererbsenmehl", "Buchweizenmehl", "Maismehl"],
+    "weizenstärke":   ["Maisstärke", "Tapiokastärke", "Kartoffelstärke", "Pfeilwurzelstärke"],
+    "stärke":         ["Maisstärke", "Kartoffelstärke", "Tapiokastärke"],
+    "semmelbrösel":   ["Glutenfreie Semmelbrösel", "Reisbrösel", "Maisgrieß", "Kichererbsenmehl"],
+    "paniermehl":     ["Glutenfreies Paniermehl", "Maismehl", "Reismehl"],
+    "panko":          ["Glutenfreies Panko", "Maisflakes (fein gemahlen)"],
+    "nudeln":         ["Reisnudeln", "Buchweizennudeln", "Linsen-Pasta", "Erbsen-Pasta", "Glasnudeln"],
+    "pasta":          ["Rice pasta", "Buckwheat pasta", "Lentil pasta", "Chickpea pasta"],
+    "spaghetti":      ["Reisnudeln", "Buchweizenspaghetti", "Maisspaghetti"],
+    "brot":           ["Glutenfreies Brot (Reismehl-Basis)", "Maiswrap", "Reiswaffel"],
+    "toastbrot":      ["Glutenfreies Toastbrot"],
+    "weizen":         ["Buchweizen (trotz Name glutenfrei)", "Hirse", "Quinoa", "Amaranth"],
+    "dinkel":         ["Buchweizen", "Hirse", "Reismehl"],
+    "roggen":         ["Buchweizen", "Reismehl", "Maismehl"],
+    "gerste":         ["Buchweizen", "Hirse", "Quinoa"],
+    "hafer":          ["Glutenfreier Hafer (zertifiziert)", "Hirse", "Buchweizen"],
+    "bulgur":         ["Hirse", "Quinoa", "Buchweizen"],
+    "couscous":       ["Hirsekörner", "Quinoa", "Blumenkohlreis"],
+    "grieß":          ["Polenta (Maisgrieß)", "Buchweizengries", "Hirsegrieß"],
+    "seitan":         ["Tofu", "Tempeh", "Jackfrucht", "Hülsenfrüchte"],
+    "gluten":         ["Glutenfreie Alternative je nach Gericht"],
+    "wheat flour":    ["Rice flour", "Buckwheat flour", "Chickpea flour", "Almond flour"],
+    "wheat starch":   ["Cornstarch", "Tapioca starch", "Potato starch"],
+    "breadcrumbs":    ["Gluten-free breadcrumbs", "Rice crumbs", "Cornmeal"],
+    "malt":           ["Ahornsirup", "Reissirup", "Dattelsirup"],
+    "malzextrakt":    ["Reissirup", "Ahornsirup"],
+
+    # Soja
+    "soja":           ["Kichererbsen", "Erbsenprotein", "Linsen"],
+    "sojasoße":       ["Tamari (glutenfreie Sojasoße, falls nur Glutenallergie)", "Kokosaminos", "Worcestersauce (fischfrei)"],
+    "soy sauce":      ["Coconut aminos", "Tamari (check label)", "Fish sauce (if no fish allergy)"],
+    "sojaprotein":    ["Erbsenprotein", "Reisprotein", "Hanfprotein"],
+    "sojalecithin":   ["Sonnenblumenlecithin", "Rapsöl (als Emulgator)"],
+    "soy lecithin":   ["Sunflower lecithin", "Rapeseed lecithin"],
+    "lecithin":       ["Sonnenblumenlecithin (E322 aus Sonnenblume)"],
+    "tofu":           ["Kichererbsen-Tofu", "Weiße Bohnen (püriert)", "Jackfrucht"],
+    "tempeh":         ["Kichererbsen", "Schwarze Bohnen", "Jackfrucht"],
+    "miso":           ["Kichererbsen-Miso", "Hefeflocken + Salz + etwas Essig"],
+    "edamame":        ["Junge Erbsen (Petits Pois)", "Dicke Bohnen"],
+    "sojamilch":      ["Hafermilch", "Reismilch", "Kokosdrink", "Erbsendrink"],
+    "soy milk":       ["Oat milk", "Rice milk", "Pea milk", "Coconut drink"],
+    "kokosaminos":    ["Kokosaminos sind bereits Sojasoßen-Ersatz"],
+
+    # Nüsse
+    "mandel":         ["Sonnenblumenkerne", "Kürbiskerne", "Reismehl (für Mandelmehl)"],
+    "haselnuss":      ["Sonnenblumenkerne", "Kürbiskernmus"],
+    "walnuss":        ["Hanfsamen", "Sonnenblumenkerne", "Kürbiskerne"],
+    "cashew":         ["Sonnenblumenkerne", "Kürbiskerne (für Creme)"],
+    "pistazie":       ["Kürbiskerne (ähnliche Farbe)", "Sonnenblumenkerne"],
+    "macadamia":      ["Sonnenblumenkerne", "Kürbiskerne"],
+    "pekannuss":      ["Sonnenblumenkerne", "Hanfsamen"],
+    "paranuss":       ["Sonnenblumenkerne", "Kürbiskerne"],
+    "pinienkern":     ["Sonnenblumenkerne", "Kürbiskerne", "Hanfsamen"],
+    "kokos":          ["Sonnenblumenkerne (geröstet)", "Haferflocken (für Kokosraspeln-Ersatz)"],
+    "kokosmilch":     ["Hafersahne", "Cashewmilch (falls keine Nussallergie)", "Erbsensahne"],
+    "coconut milk":   ["Oat cream", "Sunflower seed cream", "Pea cream"],
+    "nougat":         ["Sonnenblumenkern-Nougat", "Kakaopaste + Agavensirup"],
+    "marzipan":       ["Sonnenblumenkern-Marzipan (Sonnenblumenkerne + Zucker + Rosenwasser)"],
+    "nutella":        ["Sonnenblumenkern-Aufstrich", "Kakaobutter + Reissirup"],
+    "almond":         ["Sunflower seeds", "Pumpkin seeds", "Sunflower seed flour"],
+    "hazelnut":       ["Sunflower seed butter", "Pumpkin seed butter"],
+    "walnut":         ["Hemp seeds", "Sunflower seeds"],
+    "cashew nut":     ["Sunflower seeds", "Pumpkin seeds"],
+    "chestnut":       ["Kürbis (in herzhaften Gerichten)", "Kichererbsen"],
+    "nut butter":     ["Sunflower seed butter", "Pumpkin seed butter"],
+
+    # Fisch
+    "fisch":          ["Tofu (geräuchert)", "Jackfrucht (in herzhaften Gerichten)", "Kichererbsen"],
+    "lachs":          ["Geräucherter Tofu", "Marinierte Karotten (als Räucherlachs-Optik)", "Rote Beete"],
+    "thunfisch":      ["Kichererbsen (zerkrümelt, als Thunfischersatz)", "Junger Jackfruit"],
+    "sardelle":       ["Kapernsauce", "Misopaste (Umami)", "Algen-Würzsauce"],
+    "anchovis":       ["Kapernsauce", "Misopaste", "Algen-Worcestersauce"],
+    "worcestersauce": ["Kokosaminos + Tamarinde + Gewürze", "Vegane Worcestersauce"],
+    "worcestershire": ["Coconut aminos + tamarind", "Vegan worcestershire sauce"],
+    "fischöl":        ["Algenöl (DHA/EPA aus Meeresalgen)", "Leinöl (ALA)"],
+    "fish oil":       ["Algae oil (DHA/EPA)", "Flaxseed oil (ALA)"],
+    "fischsauce":     ["Kokosaminos", "Sojasauce (falls keine Sojaallerie)", "Algen-Würzsoße"],
+    "fish sauce":     ["Coconut aminos", "Soy sauce (if tolerated)", "Seaweed seasoning"],
+    "surimi":         ["Herzhafter Tofu", "Kichererbsen"],
+    "caesar dressing":["Veganes Caesar-Dressing (Cashewbasis, Kapern statt Anchovis)"],
+
+    # Sellerie
+    "sellerie":       ["Fenchel", "Petersilienwurzel", "Pastinake", "Kohlrabi"],
+    "selleriesalz":   ["Meersalz + getrockneter Fenchel", "Kräutersalz ohne Sellerie"],
+    "celery":         ["Fennel", "Parsley root", "Kohlrabi", "Leek"],
+    "celery salt":    ["Sea salt + dried fennel", "Herb salt (celery-free)"],
+    "suppengrün":     ["Lauch + Möhren + Petersilie (ohne Sellerie)"],
+    "gemüsebrühe":    ["Selbstgemachte Brühe ohne Sellerie", "Pilzbrühe"],
+
+    # Senf
+    "senf":           ["Meerrettich (schärfere Alternative)", "Kurkuma + Essig + etwas Honig", "Wasabi (in kleiner Menge)"],
+    "senfkörner":     ["Kapern", "Kümmel", "Fenchelsamen"],
+    "mustard":        ["Horseradish", "Turmeric + vinegar + honey", "Wasabi (small amount)"],
+    "mustard seed":   ["Capers", "Caraway seeds", "Fennel seeds"],
+    "remoulade":      ["Vegane Remoulade ohne Senf (Kapern + Kräuter + vegane Mayo)"],
+
+    # Sesam
+    "sesam":          ["Sonnenblumenkerne", "Kürbiskerne", "Hanfsamen", "Mohn"],
+    "sesamsamen":     ["Sonnenblumenkerne", "Hanfsamen", "Mohn", "Leinsamen"],
+    "sesam-samen":    ["Sonnenblumenkerne", "Hanfsamen", "Mohn"],
+    "sesamöl":        ["Walnussöl (Röstaroma)", "Geröstetes Kürbiskernöl", "Chiliöl (für Schärfe)"],
+    "tahini":         ["Sonnenblumenkern-Mus (Sunbutter)", "Kürbiskernmus"],
+    "tahin":          ["Sonnenblumenkern-Mus", "Kürbiskernmus"],
+    "sesame":         ["Sunflower seeds", "Pumpkin seeds", "Hemp seeds", "Poppy seeds"],
+    "sesame oil":     ["Walnut oil (roasted)", "Pumpkin seed oil", "Chili oil"],
+    "sesame seeds":   ["Sunflower seeds", "Hemp seeds", "Poppy seeds"],
+    "hummus":         ["Sonnenblumenkern-Hummus (ohne Tahini)", "Weiße-Bohnen-Dip"],
+    "halva":          ["Sonnenblumenkern-Halva", "Karamell-Konfekt"],
+    "goma":           ["Sunflower seed paste", "Pumpkin seed oil"],
+
+    # Lupine
+    "lupine":         ["Erbsenprotein", "Kichererbsenmehl", "Reisprotein"],
+    "lupinenmehl":    ["Kichererbsenmehl", "Reismehl", "Erbsenmehl"],
+    "lupin":          ["Pea protein", "Chickpea flour", "Rice protein"],
+    "lupin flour":    ["Chickpea flour", "Rice flour", "Pea flour"],
+
+    # Krebstiere
+    "garnele":        ["Herzhafter Tofu", "Shiitake-Pilze (ähnliche Textur)", "Jackfrucht"],
+    "shrimp":         ["Firm tofu", "King oyster mushroom", "Jackfruit"],
+    "hummer":         ["Herzhafte Pilze", "Kichererbsen", "Jackfrucht"],
+    "krabbe":         ["Herzhafter Tofu", "Shiitake-Pilze", "Surimi-Ersatz aus Gemüse"],
+    "crab":           ["Firm tofu", "Shiitake mushrooms", "Hearts of palm"],
+    "garnelenpaste":  ["Miso-Paste", "Algen-Würzpaste"],
+    "shrimp paste":   ["Miso paste", "Seaweed seasoning paste"],
+    "prawn crackers": ["Reischips", "Tapioka-Chips"],
+
+    # Weichtiere
+    "muschel":        ["Herzhafte Pilze (Austernpilze)", "Artischockenherzen"],
+    "mussel":         ["Oyster mushrooms", "Artichoke hearts"],
+    "auster":         ["Austernpilze", "Artischocken"],
+    "tintenfisch":    ["Jackfrucht", "Konjak (Shirataki)", "Herzhafte Pilze"],
+    "squid":          ["Jackfruit", "Konjac", "King oyster mushroom"],
+    "calamari":       ["Jackfrucht-Calamari", "Konjak-Ringe"],
+
+    # Sulfite
+    "e220":           ["Frische Zutaten statt getrockneter/konservierter", "Ascorbinsäure (E300) als Alternative"],
+    "sulfit":         ["Frische Alternativen bevorzugen", "Ungeschwefelte Trockenfrüchte"],
+    "schwefeldioxid": ["Frische Zutaten", "Produkte ohne Konservierungsstoffe"],
+    "sulphite":       ["Fresh alternatives", "Unsulphured dried fruit"],
+    "sulfite":        ["Fresh alternatives", "Preservative-free products"],
+    "wein":           ["Traubensaft", "Apfelessig (für Säure in Saucen)", "Gemüsebrühe"],
+    "rotwein":        ["Traubensaft (dunkel)", "Granatapfelsaft", "Rote-Bete-Saft"],
+    "weißwein":       ["Heller Traubensaft", "Apfelsaft", "Gemüsebrühe mit Zitrone"],
+    "trockenfrüchte": ["Frisches Obst", "Ungeschwefelte Trockenfrüchte (im Bioladen)"],
+}
+
+
+def ersatz_fuer(gefundener_begriff: str) -> list[str]:
+    """Gibt Ersatzvorschläge für einen gefundenen Allergenbegriff zurück."""
+    begriff = gefundener_begriff.lower().strip()
+    # Exakter Treffer
+    if begriff in ERSATZ:
+        return ERSATZ[begriff]
+    # Partieller Treffer: längster passender Schlüssel gewinnt
+    treffer = [(k, v) for k, v in ERSATZ.items() if k in begriff or begriff in k]
+    if treffer:
+        bester = max(treffer, key=lambda x: len(x[0]))
+        return bester[1]
+    return []
+
+
 SPUREN_PHRASEN = [
     "kann spuren enthalten", "kann spuren von",
     "may contain", "may contain traces",
@@ -804,36 +1031,43 @@ def off_allergene_pruefen(produkt: dict, user_allergien: list[str]) -> list[dict
             if schluessel != allergie.lower().strip() and schluessel not in allergie.lower():
                 continue
             if tag in allergen_tags:
+                syn = tag.replace("en:", "")
                 funde.append({
                     "allergie":   allergie,
-                    "synonym":    tag.replace("en:", ""),
+                    "synonym":    syn,
                     "fundstelle": f"OpenFoodFacts: {produkt_name}",
                     "ist_spur":   False,
+                    "ersatz":     ersatz_fuer(syn),
                 })
                 break
             if tag in spuren_tags:
+                syn = tag.replace("en:", "")
                 funde.append({
                     "allergie":   allergie,
-                    "synonym":    tag.replace("en:", ""),
+                    "synonym":    syn,
                     "fundstelle": f"OpenFoodFacts (Spur): {produkt_name}",
                     "ist_spur":   True,
+                    "ersatz":     ersatz_fuer(syn),
                 })
                 break
     return funde
 
 
 def analyse_mit_ollama(text: str, user_allergien: list[str]) -> list[dict]:
-    """Fragt Ollama nach Allergenen im Text. Gibt Funde zurück."""
+    """Fragt Ollama nach Allergenen und Ersatzvorschlägen. Gibt Funde zurück."""
     allergien_str = ", ".join(user_allergien)
     prompt = (
-        f"Du bist ein Allergie-Assistent. Analysiere folgenden Zutaten- oder Produkttext "
+        f"Du bist ein Allergie-Assistent. Analysiere den folgenden Zutaten- oder Produkttext "
         f"und prüfe ob er Allergene enthält, die für jemanden mit diesen Allergien gefährlich sind: {allergien_str}.\n\n"
         f"Text:\n{text[:2000]}\n\n"
-        f"Antworte NUR mit einem JSON-Array. Jedes Objekt hat die Felder: "
-        f"\"allergie\" (welche Allergie betroffen), \"synonym\" (gefundener Begriff im Text), "
-        f"\"fundstelle\" (genaue Textstelle, max 80 Zeichen), \"ist_spur\" (true/false, ob es ein Spurenhinweis ist).\n"
+        f"Antworte NUR mit einem JSON-Array. Jedes Objekt hat folgende Felder:\n"
+        f"  \"allergie\": welche Allergie aus der Liste betroffen ist\n"
+        f"  \"synonym\": der genaue gefundene Begriff im Text\n"
+        f"  \"fundstelle\": die genaue Textstelle (max 80 Zeichen)\n"
+        f"  \"ist_spur\": true wenn es ein Spurenhinweis ist (z.B. 'kann Spuren enthalten'), sonst false\n"
+        f"  \"ersatz\": Array mit 1-3 konkreten Ersatzvorschlägen für den gefundenen Begriff (z.B. [\"Sonnenblumenöl\", \"Rapsöl\"]). Leeres Array wenn kein sinnvoller Ersatz existiert.\n"
         f"Wenn nichts gefunden wurde, antworte mit: []\n"
-        f"Antworte ausschliesslich mit dem JSON, ohne Erklaerung."
+        f"Antworte ausschliesslich mit dem JSON-Array, ohne Erklaerung oder weiteren Text."
     )
     try:
         r = requests.post(OLLAMA_URL, json={
@@ -842,7 +1076,6 @@ def analyse_mit_ollama(text: str, user_allergien: list[str]) -> list[dict]:
             "stream": False,
         }, timeout=30)
         raw = r.json().get("response", "[]").strip()
-        # JSON aus der Antwort extrahieren (Ollama kann manchmal Text darum schreiben)
         m = re.search(r'\[.*\]', raw, re.DOTALL)
         if m:
             return json.loads(m.group(0))
@@ -889,6 +1122,7 @@ def synonym_matching(text: str, user_allergien: list[str]) -> list[dict]:
                         "synonym":    synonym,
                         "fundstelle": zeile.strip(),
                         "ist_spur":   ist_spur,
+                        "ersatz":     ersatz_fuer(synonym),
                     })
                     break
             if any(f["allergie"] == allergie for f in funde):

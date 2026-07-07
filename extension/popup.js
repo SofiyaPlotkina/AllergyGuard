@@ -25,6 +25,25 @@ async function loadProfileBadge() {
 }
 loadProfileBadge();
 
+// ── Einzelnen Fund rendern (inkl. Ersatzvorschläge) ─────────────────────────
+function renderFund(f, istSpur) {
+    const termClass = istSpur ? 'found-term warn' : 'found-term';
+    const ersatz = Array.isArray(f.ersatz) && f.ersatz.length
+        ? `<div class="ersatz-box">
+               <strong>💡 Mögliche Alternativen:</strong>
+               ${f.ersatz.map(e => `• ${e}`).join('<br>')}
+           </div>`
+        : '';
+    return `
+        <div style="margin-bottom:8px;">
+            <span class="${termClass}">${f.synonym}</span>
+            <span style="font-size:11px;color:#777;margin-left:4px;">(${f.allergie})</span>
+            <div class="result-context">${f.fundstelle}</div>
+            ${ersatz}
+        </div>
+    `;
+}
+
 // ── Ergebnis rendern ────────────────────────────────────────────────────────
 function renderResult(data, container) {
     const urteil = (data.urteil || '').toUpperCase();
@@ -58,23 +77,11 @@ function renderResult(data, container) {
 
         if (gefahrFunde.length) {
             bodyHTML += `<div class="label" style="margin-bottom:4px;">Direkt gefunden:</div>`;
-            bodyHTML += gefahrFunde.map(f => `
-                <div style="margin-bottom:6px;">
-                    <span class="found-term">${f.synonym}</span>
-                    <span style="font-size:11px;color:#777;margin-left:4px;">(${f.allergie})</span>
-                    <div class="result-context">${f.fundstelle}</div>
-                </div>
-            `).join('');
+            bodyHTML += gefahrFunde.map(f => renderFund(f, false)).join('');
         }
         if (spurenFunde.length) {
             bodyHTML += `<div class="label" style="margin-bottom:4px;margin-top:${gefahrFunde.length ? 6 : 0}px;">Spurenhinweise:</div>`;
-            bodyHTML += spurenFunde.map(f => `
-                <div style="margin-bottom:6px;">
-                    <span class="found-term warn">${f.synonym}</span>
-                    <span style="font-size:11px;color:#777;margin-left:4px;">(${f.allergie})</span>
-                    <div class="result-context">${f.fundstelle}</div>
-                </div>
-            `).join('');
+            bodyHTML += spurenFunde.map(f => renderFund(f, true)).join('');
         }
     }
 
