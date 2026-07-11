@@ -93,7 +93,7 @@ function renderResult(data, container) {
     `;
 }
 
-// ── Website-Text extrahieren (smart: sucht Zutaten-Bereich) ────────────────
+// ── Website-Text extrahieren (smart: sucht Zutaten-Bereich + versteckte Allergie-Listen) ────────────────
 function extractPageText() {
     // Strukturierte Rezeptdaten bevorzugen (schema.org)
     const recipeSchema = document.querySelector('[itemtype*="Recipe"]');
@@ -123,15 +123,58 @@ function extractPageText() {
         '[class*="zutat"]',      '[id*="zutat"]',
         '[class*="recipe"]',     '[id*="recipe"]',
         '[class*="rezept"]',     '[id*="rezept"]',
+        '[class*="allergen"]',   '[id*="allergen"]',
         'ul.ingredients', 'ol.ingredients',
     ];
     for (const sel of candidates) {
         const el = document.querySelector(sel);
-        if (el && el.innerText.trim().length > 30) return el.innerText;
+        if (el && el.innerText.trim().length > 30) {
+            return el.innerText;
+        }
     }
 
-    // Fallback: gesamter Body-Text (max 4000 Zeichen)
-    return document.body.innerText.substring(0, 4000);
+    // ── WICHTIG: Allergie-Informationen aus VERSTECKTEN Elementen auslesen ──
+    let allergyText = '';
+    
+    // 1. Durchsuche <details> Elemente (aufzuklappbare Bereiche)
+    for (const details of document.querySelectorAll('details')) {
+        const detailsText = details.innerText || details.textContent || '';
+        const detailsLower = detailsText.toLowerCase();
+        if (detailsLower.includes('allergen') || detailsLower.includes('allergie') || 
+            detailsLower.includes('spuren') || detailsLower.includes('may contain')) {
+            allergyText += '\n' + detailsText;
+        }
+    }
+    
+    // 2. Durchsuche versteckte Divs und Sections (display:none, hidden, etc)
+    for (const el of document.querySelectorAll('div[style], section[style], div[class], section[class]')) {
+        const text = el.textContent || '';
+        const textLower = text.toLowerCase();
+        if ((textLower.includes('allergen') || textLower.includes('allergie') || 
+             textLower.includes('spuren') || textLower.includes('may contain') ||
+             textLower.includes('ingredients') || textLower.includes('zutaten')) &&
+            text.length > 20) {
+            allergyText += '\n' + text;
+        }
+    }
+    
+    // Wenn Allergie-Text gefunden, nutze ihn
+    if (allergyText.trim().length > 30) {
+        return allergyText.substring(0, 8000);
+    }
+
+    // Fallback: Suche nach Allergie-relevanten Hinweisen im Body
+    let bodyText = document.body.innerText.substring(0, 4000);
+    
+    // Versuche auch Textblöcke zu finden die "Allergen", "Spuren", etc enthalten
+    const allergyKeywords = ['allergen', 'spuren', 'may contain', 'enthält', 'zutat', 'ingredient', 'prodotto'];
+    const bodyTextLower = bodyText.toLowerCase();
+    if (allergyKeywords.some(kw => bodyTextLower.includes(kw))) {
+        // Wenn Allergie-Keywords gefunden wurden, nimm mehr Text
+        return document.body.innerText.substring(0, 8000);
+    }
+    
+    return bodyText;
 }
 
 // ── Website scannen ─────────────────────────────────────────────────────────
