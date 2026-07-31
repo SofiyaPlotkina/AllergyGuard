@@ -195,6 +195,11 @@ ALLERGEN_SYNONYME: dict[str, list[str]] = {
         "miso",                  # oft mit Gerste/Weizen
         # ── Gluten direkt ──
         "gluten", "weizengluten", "vital wheat gluten",
+        "glutenhaltig", "glutenfrei",  # Hinweistext in Allergenlisten
+        # ── Cerealien & Getreide (allgemein) ──
+        "cerealien", "cerealie", "cerealienerzeugnisse",
+        "getreide", "getreideerzeugnis", "getreideprodukt",
+        "vollkorn", "vollkorngetreide",
         # ── Englisch ──
         "wheat", "wheat flour", "wheat starch", "wheat germ", "wheat bran",
         "wheat protein", "wheat gluten", "durum wheat", "wheat semolina",
@@ -205,6 +210,7 @@ ALLERGEN_SYNONYME: dict[str, list[str]] = {
         "spelt", "triticale", "kamut", "einkorn", "emmer",
         "breadcrumbs", "bread crumbs", "breading",
         "flour", "all-purpose flour", "plain flour",
+        "cereal", "cereals", "grain", "grains", "whole grain",
     ],
 
     "soja": [

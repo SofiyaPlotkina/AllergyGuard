@@ -12,7 +12,9 @@ OLLAMA_MODEL = "llama3"
 
 # Kurze Begriffe die Wortgrenzen brauchen um Falschpositive zu vermeiden
 # z.B. "ei" soll nicht "Zwiebel", "Eisen", "Protein" treffen
+# "bier" soll nicht "Probieren" treffen, "teig" nicht "teigige"
 WORTGRENZE_SYNONYME = {
     "ei", "eier", "nut", "nuts", "cod", "rye", "oat", "oats", "malt",
     "crab", "bass", "clam", "aal", "feta", "brie",
+    "bier", "teig",  # Neue: verhindern False Positives in "probieren", "teigige"
 }

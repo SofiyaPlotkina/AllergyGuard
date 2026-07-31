@@ -1,25 +1,5 @@
 (function () {
     function extractPageText() {
-        // ═══════════════════════════════════════════════════════════════════
-        // PRE-PROCESSING: Öffne ALLE Dropdowns/Details für vollständigen Zugriff!
-        // ═══════════════════════════════════════════════════════════════════
-        try {
-            // <details> Tags (HTML5 Dropdowns) öffnen
-            document.querySelectorAll('details').forEach(detail => {
-                detail.setAttribute('open', '');
-            });
-            
-            // Aria-Dropdowns
-            document.querySelectorAll('[aria-expanded="false"]').forEach(el => {
-                el.setAttribute('aria-expanded', 'true');
-            });
-        } catch (e) {
-            console.warn('[AllergyGuard] Dropdown opening failed:', e);
-        }
-        
-        // DEBUG-MARKER (wird im Backend sichtbar sein)
-        console.log('[AllergyGuard] ✅ NEUE extract.js VERSION v2.0 läuft!');
-        
         function normalizeText(value) {
             return (value || '')
                 .replace(/\r/g, '\n')
@@ -128,43 +108,11 @@
         }
 
         function fromKnownSelectors() {
-            // Für Produktseiten: Sammle MEHRERE Sektionen!
-            const produktSelectors = [
-                '[class*="allergen"]', '[id*="allergen"]',
-                '[class*="allergene"]', '[id*="allergene"]',
-                '[class*="inhaltsstoff"]', '[id*="inhaltsstoff"]',
-                '[class*="zutat"]', '[id*="zutat"]',
-                '[class*="zutaten"]', '[id*="zutaten"]',
-                '[class*="warnhinweis"]', '[id*="warnhinweis"]',
-                '[class*="produktbeschreibung"]', '[id*="produktbeschreibung"]',
-                '[class*="product-description"]', '[id*="product-description"]',
-                '[class*="product-details"]', '[id*="product-details"]',
-            ];
-            
-            const chunks = [];
-            for (const selector of produktSelectors) {
-                const elements = document.querySelectorAll(selector);
-                for (const el of elements) {
-                    const text = textFromNode(el);
-                    if (text.length > 20) {
-                        chunks.push(text);
-                    }
-                }
-            }
-            
-            if (chunks.length > 0) {
-                const combined = finalize(chunks.join('\n\n'));
-                // GENERISCH: Nur returnen wenn genug Text gefunden wurde
-                // Wenig Text (z.B. 219 Zeichen) → überspringen → Fallback extrahiert alles!
-                if (combined.length > 800) {
-                    return combined;
-                }
-            }
-            
-            // Fallback: Rezept-Selektoren (wie vorher)
-            const rezeptSelectors = [
+            const selectors = [
                 '[class*="ingredient"]', '[id*="ingredient"]',
                 '[class*="ingredients"]', '[id*="ingredients"]',
+                '[class*="zutat"]', '[id*="zutat"]',
+                '[class*="zutaten"]', '[id*="zutaten"]',
                 '[class*="recipe-ingredients"]', '[id*="recipe-ingredients"]',
                 '[class*="recipeIngredients"]', '[id*="recipeIngredients"]',
                 '[class*="ingredient-list"]', '[id*="ingredient-list"]',
@@ -188,7 +136,7 @@
                 'section.ingredients', 'div.ingredients', 'ul.ingredients', 'ol.ingredients',
             ];
 
-            for (const selector of rezeptSelectors) {
+            for (const selector of selectors) {
                 const element = document.querySelector(selector);
                 const text = finalize(textFromNode(element));
                 if (text.length > 30) {
@@ -200,8 +148,8 @@
         }
 
         function fromHeadings() {
-            const headingSelectors = 'h1, h2, h3, h4, h5, h6, strong, b, summary';
-            const headingPattern = /(zutaten|ingredients|ingredient list|rezeptzutaten|allergene|allergen|inhaltsstoffe|warnhinweise|produktbeschreibung)/i;
+            const headingSelectors = 'h1, h2, h3, h4, h5, h6, strong, b';
+            const headingPattern = /(zutaten|ingredients|ingredient list|rezeptzutaten)/i;
 
             for (const heading of document.querySelectorAll(headingSelectors)) {
                 const headingText = textFromNode(heading);
@@ -233,8 +181,7 @@
                 }
 
                 const merged = finalize(chunks.join('\n'));
-                // Nur returnen wenn genug Text (> 800 Zeichen) gefunden wurde
-                if (merged.length > 800) {
+                if (merged.length > 30) {
                     return merged;
                 }
             }
@@ -243,13 +190,30 @@
         }
 
         function fromFallbackContent() {
-            // Aggressive Strategie: Extrahiere ALLES vom Body für Produktseiten
-            // (Die vorherigen Stages haben nichts gefunden)
-            const bodyText = textFromNode(document.body);
-            
-            // Für Produktseiten: Nimm mehr als die normalen 6000 Zeichen
-            const maxChars = 10000;
-            return finalize(bodyText.substring(0, maxChars));
+            const pieces = [];
+            const title = normalizeText(document.title || '');
+            if (title) {
+                pieces.push(title);
+            }
+
+            const listTexts = [];
+            for (const list of document.querySelectorAll('ul, ol')) {
+                const text = textFromNode(list);
+                if (text.length >= 20) {
+                    listTexts.push(text);
+                }
+                if (listTexts.length >= 8) {
+                    break;
+                }
+            }
+            pieces.push(listTexts.join('\n\n'));
+
+            const bodyText = textFromNode(document.body).substring(0, 5000);
+            if (bodyText) {
+                pieces.push(bodyText);
+            }
+
+            return finalize(pieces.filter(Boolean).join('\n\n'));
         }
 
         const extractionStages = [
@@ -263,7 +227,6 @@
         for (const stage of extractionStages) {
             const text = stage();
             if (text.length > 30) {
-                console.log(`[AllergyGuard] ✅ Stage ${stage.name} → ${text.length} Zeichen`);
                 return text;
             }
         }

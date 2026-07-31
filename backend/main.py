@@ -29,24 +29,55 @@ init_db()
 def extrahiere_produktnamen(text: str) -> list[str]:
     """Versucht Produktnamen oder Barcodes aus dem Freitext zu extrahieren."""
     kandidaten = []
+    gesehen = set()
+    
+    # Ignoriere generische Überschriften
+    IGNORIERTE_ZEILEN = {
+        "produktbeschreibung", "zutaten", "allergene", "nährwerte", 
+        "inhaltsstoffe", "ingredients", "allergens", "nutrition",
+        "beschreibung", "details", "information"
+    }
 
-    # Barcode (EAN-8, EAN-13)
-    for barcode in re.findall(r'\b\d{8,13}\b', text):
+    # GTIN/EAN explizit suchen (oft in "GTIN: 1234567890")
+    gtin_match = re.search(r'(?:GTIN|EAN|Barcode)[:\s]+(\d{8,13})', text, re.IGNORECASE)
+    if gtin_match:
+        barcode = gtin_match.group(1)
         kandidaten.append(barcode)
+        gesehen.add(barcode.lower())
 
-    # Erste nicht-leere Zeile als Produktname (oft Überschrift / Seitentitel)
-    for zeile in text.splitlines():
-        zeile = zeile.strip()
-        if 5 < len(zeile) < 80:
-            kandidaten.append(zeile)
-            break
+    # Alle Barcodes (EAN-8, EAN-13) sammeln
+    for barcode in re.findall(r'\b\d{8,13}\b', text):
+        if barcode.lower() not in gesehen:
+            kandidaten.append(barcode)
+            gesehen.add(barcode.lower())
 
-    # Zutaten-Substring (erste 120 Zeichen nach "Zutaten:" o.Ä.)
-    m = re.search(r'(?:zutaten|ingredients)[:\s]+(.{10,120})', text, re.IGNORECASE)
-    if m:
-        kandidaten.append(m.group(1).strip())
+    # Produktname aus den ersten Zeilen extrahieren (skip generische Überschriften)
+    for zeile in text.splitlines()[:10]:  # Erste 10 Zeilen durchsuchen
+        zeile_clean = zeile.strip()
+        zeile_lower = zeile_clean.lower()
+        
+        # Skip zu kurze/lange oder generische Zeilen
+        if not (15 < len(zeile_clean) < 100):  # Mindestens 15 Zeichen für echte Produktnamen
+            continue
+        if zeile_lower in IGNORIERTE_ZEILEN:
+            continue
+        if any(ig in zeile_lower for ig in IGNORIERTE_ZEILEN):
+            continue
+        
+        # Skip Marketing-Floskeln
+        if any(floskeln in zeile_lower for floskeln in ["hoher", "niedriger", "reich an", "ohne", "mit extra"]):
+            continue
+        
+        # Guter Kandidat: Zeile mit Produkt-typischen Wörtern + Marke/Geschmack
+        if any(keyword in zeile_lower for keyword in ["riegel", "protein", "schokolade", "müsli", "joghurt", "drink", "snack", "kekse", "chips"]):
+            # Muss auch Marke/Geschmack enthalten (nicht nur "Proteinriegel")
+            if any(detail in zeile_lower for detail in ["caramel", "vanille", "schoko", "nuss", "beere", "frucht", "geschmack", "%", "sportness", "dm"]):
+                if zeile_lower not in gesehen:
+                    kandidaten.append(zeile_clean)
+                    gesehen.add(zeile_lower)
+                    break
 
-    return kandidaten[:3]  # max 3 Versuche
+    return kandidaten[:5]  # max 5 Versuche
 
 
 # ── Endpunkte ─────────────────────────────────────────────────────────────────
@@ -96,22 +127,52 @@ def check_recipe(request: RecipeRequest):
     user_allergy = user["allergy"]
     allergien    = [a.strip() for a in user_allergy.split(",") if a.strip()]
     text         = request.ingredients
+    
+    # DEBUG: Log KOMPLETTEN extrahierten Text
+    print(f"\n{'='*80}")
+    print(f"🔍 EMPFANGENER TEXT (KOMPLETT):")
+    print(f"{'='*80}")
+    print(text)
+    print(f"{'='*80}")
+    print(f"📊 Text-Länge: {len(text)} Zeichen | Zeilen: {len(text.splitlines())}")
+    print(f"👤 User: {user_name} | Allergien: {allergien}")
+    print(f"🔎 Suche nach 'cerealien': {'cerealien' in text.lower()}")
+    print(f"🔎 Suche nach 'allergen': {'allergen' in text.lower()}")
+    print(f"{'='*80}\n")
 
     funde: list[dict] = []
     methode = "synonym"
 
-    # ── 1. OpenFoodFacts — NUR bei Barcode ───────────────────────────────────
-    # Freitext-Rezepte liefern auf OFF zufällige Produkte (z.B. "Biscoff"),
-    # daher wird OFF ausschließlich bei erkanntem EAN-8/EAN-13-Barcode genutzt.
+    # ── 1. OpenFoodFacts — Produktsuche (Barcode ODER Produktname) ──────────
+    # Versuche erst Barcode, dann Produktnamen aus dem Text zu extrahieren
+    produkt = None
+    
+    # 1a) Barcode-Suche (EAN-8, EAN-13, GTIN)
     barcodes = re.findall(r'\b\d{8,13}\b', text)
     for barcode in barcodes:
         produkt = suche_off(barcode)
-        if produkt:
-            off_funde = off_allergene_pruefen(produkt, allergien)
-            if off_funde or produkt.get("allergens_tags"):
-                funde = off_funde
-                methode = "openfoodfacts"
+        if produkt and (produkt.get("allergens_tags") or produkt.get("ingredients_text")):
+            print(f"✅ OFF: Produkt via Barcode gefunden: {produkt.get('product_name', 'Unbekannt')}")
+            break
+        produkt = None  # Reset wenn kein Match
+    
+    # 1b) Produktnamen-Suche (falls kein Barcode-Match)
+    if not produkt:
+        kandidaten = extrahiere_produktnamen(text)
+        for kandidat in kandidaten:
+            produkt = suche_off(kandidat)
+            if produkt and (produkt.get("allergens_tags") or produkt.get("ingredients_text")):
+                print(f"✅ OFF: Produkt via Name gefunden: {produkt.get('product_name', 'Unbekannt')} (Suche: '{kandidat}')")
                 break
+            produkt = None
+    
+    # 1c) Allergene prüfen wenn Produkt gefunden
+    if produkt:
+        off_funde = off_allergene_pruefen(produkt, allergien)
+        if off_funde or produkt.get("allergens_tags"):
+            funde = off_funde
+            methode = "openfoodfacts"
+            print(f"✅ OFF: {len(off_funde)} Allergene gefunden")
 
     # ── 2. Ollama-Fallback ────────────────────────────────────────────────────
     if methode != "openfoodfacts":
