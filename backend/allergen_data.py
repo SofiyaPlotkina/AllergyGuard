@@ -97,12 +97,14 @@ ALLERGEN_SYNONYME: dict[str, list[str]] = {
     ],
 
     "ei": [
+        # ── Basisbegriffe (WICHTIG!) ──
+        "ei", "eier",  # MUSS am Anfang stehen! Z.B. "2 Ei(er)" auf Rezepten
         # ── Deutsch ──
         "hühnerei", "hühnereier", "entenei", "enteneier",
         "gänseei", "gänseeier", "wachtelei", "wachteleier",
         "vollei", "volleipulver",
         "eigelb", "eidotter", "dotter", "eigelbpulver",
-        "eiklar", "eiweiß", "eiklarpulver", "eiweißpulver",
+        "eiklar", "eiklarpulver",  # "eiweiß" entfernt - zu ambig (Protein vs Ei)
         "eipulver", "trockenei", "trockeneigelb", "trockeneiklar",
         "flüssigei", "flüssigeiklar", "flüssigeigelb",
         "pasteurisiertes ei", "pasteurisiertes vollei",
@@ -157,7 +159,8 @@ ALLERGEN_SYNONYME: dict[str, list[str]] = {
         "haferprotein", "haferstärke",
         "rolled oats", "oat flakes",
         # ── Mehlprodukte & Backzutaten ──
-        "mehl", "vollkornmehl", "type 405", "type 550", "type 1050",
+        # NICHT "mehl" alleine - zu viele false positives (Reismehl, etc.)
+        "weizenmehl", "vollkornmehl", "type 405", "type 550", "type 1050",
         "grieß", "hartweizengrieß",
         "semmelbrösel", "paniermehl", "panko", "tempuramehl",
         "backpulver",            # kann Weizenstärke enthalten

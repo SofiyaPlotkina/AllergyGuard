@@ -37,6 +37,20 @@ def init_db():
             cached_at TEXT NOT NULL
         )
     ''')
+    
+    # Neue Tabelle für dynamisch gelernte Synonyme
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS learned_synonyms (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            allergen TEXT NOT NULL,
+            synonym TEXT NOT NULL,
+            quelle TEXT NOT NULL,
+            confidence INTEGER DEFAULT 1,
+            first_seen TEXT NOT NULL,
+            last_seen TEXT NOT NULL,
+            UNIQUE(allergen, synonym)
+        )
+    ''')
 
     cols = [r[1] for r in conn.execute("PRAGMA table_info(history)").fetchall()]
     if "methode" not in cols:

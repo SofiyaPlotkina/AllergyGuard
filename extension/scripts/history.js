@@ -62,6 +62,8 @@
                         openfoodfacts: '🗄️ OpenFoodFacts',
                         ollama: '🤖 KI',
                         synonym: '🔤 Textanalyse',
+                        'synonym+ki': '🔤🤖 Text + KI',
+                        ki: '🤖 KI',
                     }[item.methode] || item.methode || '';
 
                     // Parse result_snapshot wenn vorhanden

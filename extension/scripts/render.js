@@ -38,6 +38,8 @@
             openfoodfacts: '🗄️ OpenFoodFacts',
             ollama: '🤖 KI (Ollama)',
             synonym: '🔤 Textanalyse',
+            'synonym+ki': '🔤🤖 Textanalyse + KI',
+            ki: '🤖 KI (Ollama)',
         }[data.methode] || data.methode;
         bodyHTML += `<div style="margin-bottom:10px;">
             <span style="display:inline-block;background:#f0f0f0;color:#555;font-size:11px;padding:3px 8px;border-radius:10px;font-weight:500;">

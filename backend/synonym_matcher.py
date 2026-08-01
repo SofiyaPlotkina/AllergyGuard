@@ -4,17 +4,34 @@ import re
 
 from allergen_data import ALLERGEN_SYNONYME, ersatz_fuer
 from config import SPUREN_PHRASEN, WORTGRENZE_SYNONYME
+from text_filter import extrahiere_zutaten_sektion
 
 
 def synonyme_fuer(allergen: str) -> list[str]:
-    """Gibt die Liste der Synonyme für ein Allergen zurück."""
+    """
+    Gibt die Liste der Synonyme für ein Allergen zurück.
+    Kombiniert statische Synonyme + dynamisch gelernte.
+    """
     key = allergen.lower().strip()
+    synonyme = []
+    
+    # 1. Statische Synonyme aus allergen_data.py
     if key in ALLERGEN_SYNONYME:
-        return ALLERGEN_SYNONYME[key]
-    for k, synonyme in ALLERGEN_SYNONYME.items():
-        if k in key or key in k:
-            return synonyme
-    return [key]
+        synonyme.extend(ALLERGEN_SYNONYME[key])
+    else:
+        for k, syns in ALLERGEN_SYNONYME.items():
+            if k in key or key in k:
+                synonyme.extend(syns)
+    
+    # 2. Dynamisch gelernte Synonyme aus DB
+    try:
+        from synonym_learner import hole_gelernte_synonyme
+        learned = hole_gelernte_synonyme(allergen)
+        synonyme.extend(learned)
+    except Exception:
+        pass  # DB nicht verfügbar, nur statische nutzen
+    
+    return synonyme if synonyme else [key]
 
 
 def synonym_trifft(synonym: str, text_lower: str) -> bool:
@@ -31,9 +48,26 @@ def synonym_matching(text: str, user_allergien: list[str]) -> list[dict]:
     
     WICHTIG: Diese Funktion MUSS deterministisch sein!
     Gleicher Input = immer gleicher Output (für Allergiker-Sicherheit).
+    
+    KRITISCH: Analysiert NUR Zutaten-Sektionen, NICHT:
+    - Produktbeschreibungen ("Cremiger Brotaufstrich")
+    - Verwendungshinweise ("Ideal auf Brot")
+    - Nährwerttabellen ("Eiweiß 14 g")
     """
+    # ══════════════════════════════════════════════════════════════════════
+    # SCHRITT 1: Extrahiere NUR Zutaten-Sektion
+    # ══════════════════════════════════════════════════════════════════════
+    zutaten_text = extrahiere_zutaten_sektion(text)
+    
+    # Wenn keine Zutaten gefunden, analysiere nichts
+    if not zutaten_text:
+        print("[synonym_matcher] ⚠️  Keine Zutaten-Sektion gefunden → kein Matching")
+        return []
+    
+    print(f"[synonym_matcher] ✅ Zutaten-Text ({len(zutaten_text)} Zeichen): {zutaten_text[:100]}...")
+    
     funde = []
-    text_lower = text.lower()
+    text_lower = zutaten_text.lower()  # NUR Zutaten analysieren!
     
     # Gesehene Allergene tracken, um Duplikate zu vermeiden
     gefundene_allergene = set()
@@ -61,6 +95,13 @@ def synonym_matching(text: str, user_allergien: list[str]) -> list[dict]:
             if not matches:
                 continue
             
+            # FILTER: Überspringe Nährwerttabellen-Kontext (z.B. "Eiweiß 14 g")
+            if synonym == "eiweiß":
+                # Prüfe ob das Pattern "Eiweiß X g" oder "Eiweiß X gramm" ist
+                naehrwert_pattern = r'eiweiß\s*\d+[.,]?\d*\s*(g|gramm|mg|%)'
+                if any(re.search(naehrwert_pattern, text_lower[m.start():m.end()+20]) for m in matches):
+                    continue  # Skip - das ist die Nährwerttabelle
+            
             # Prüfe JEDE Position auf Spurenhinweise
             # Wenn IRGENDEINE Position eine Spur ist, ist das GANZE eine Spur
             ist_spur = False
@@ -79,15 +120,15 @@ def synonym_matching(text: str, user_allergien: list[str]) -> list[dict]:
             
             # Fundstelle: Extrahiere die Zeile der ersten Position
             erste_pos = matches[0].start()
-            zeile_start = text.rfind('\n', 0, erste_pos)
+            zeile_start = zutaten_text.rfind('\n', 0, erste_pos)
             zeile_start = 0 if zeile_start == -1 else zeile_start + 1
             
-            zeile_end = text.find('\n', erste_pos)
-            zeile_end = len(text) if zeile_end == -1 else zeile_end
+            zeile_end = zutaten_text.find('\n', erste_pos)
+            zeile_end = len(zutaten_text) if zeile_end == -1 else zeile_end
             
-            fundstelle = text[zeile_start:zeile_end].strip()
+            fundstelle = zutaten_text[zeile_start:zeile_end].strip()
             if not fundstelle:
-                fundstelle = text[:100].strip() + "..."
+                fundstelle = zutaten_text[:100].strip() + "..."
             
             # Gefunden! Sammle diesen Fund
             allergen_funde.append({

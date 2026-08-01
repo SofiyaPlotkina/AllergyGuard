@@ -11,6 +11,9 @@ from allergen_data import ersatz_fuer
 from synonym_matcher import synonyme_fuer, synonym_matching
 from openfoodfacts_client import suche_off, off_allergene_pruefen
 from ollama_client import analyse_mit_ollama
+from synonym_learner import lerne_synonym, lerne_von_ollama_funden, lerne_von_off_ingredients
+from ambiguity_checker import braucht_ki_check
+from eiweiss_filter import filtere_eiweiss_funde
 
 app = FastAPI()
 
@@ -143,48 +146,96 @@ def check_recipe(request: RecipeRequest):
     funde: list[dict] = []
     methode = "synonym"
 
-    # ── 1. OpenFoodFacts — Produktsuche (Barcode ODER Produktname) ──────────
-    # Versuche erst Barcode, dann Produktnamen aus dem Text zu extrahieren
+    # ══════════════════════════════════════════════════════════════════════════
+    # SMART CASCADE: Schnell → Langsam, Lokal → Remote, Lernen bei jedem Schritt
+    # ══════════════════════════════════════════════════════════════════════════
+
+    # ── TIER 1: OpenFoodFacts (extern, cached, Synonym-Learning) ─────────────
+    print(f"\n🔬 TIER 1: OpenFoodFacts")
     produkt = None
     
-    # 1a) Barcode-Suche (EAN-8, EAN-13, GTIN)
+    # 1a) Barcode-Suche
     barcodes = re.findall(r'\b\d{8,13}\b', text)
     for barcode in barcodes:
         produkt = suche_off(barcode)
         if produkt and (produkt.get("allergens_tags") or produkt.get("ingredients_text")):
-            print(f"✅ OFF: Produkt via Barcode gefunden: {produkt.get('product_name', 'Unbekannt')}")
+            print(f"   ✅ Produkt via Barcode: {produkt.get('product_name', 'Unbekannt')}")
             break
-        produkt = None  # Reset wenn kein Match
+        produkt = None
     
-    # 1b) Produktnamen-Suche (falls kein Barcode-Match)
+    # 1b) Produktnamen-Suche
     if not produkt:
         kandidaten = extrahiere_produktnamen(text)
         for kandidat in kandidaten:
             produkt = suche_off(kandidat)
             if produkt and (produkt.get("allergens_tags") or produkt.get("ingredients_text")):
-                print(f"✅ OFF: Produkt via Name gefunden: {produkt.get('product_name', 'Unbekannt')} (Suche: '{kandidat}')")
+                print(f"   ✅ Produkt via Name: {produkt.get('product_name')} ('{kandidat}')")
                 break
             produkt = None
     
-    # 1c) Allergene prüfen wenn Produkt gefunden
+    # 1c) Allergene in OFF prüfen + Synonyme lernen
     if produkt:
         off_funde = off_allergene_pruefen(produkt, allergien)
-        if off_funde or produkt.get("allergens_tags"):
+        if off_funde:
             funde = off_funde
             methode = "openfoodfacts"
-            print(f"✅ OFF: {len(off_funde)} Allergene gefunden")
+            print(f"   ✅ {len(off_funde)} Allergene in OFF gefunden!")
+            
+            # Lerne aus OFF ingredients_text
+            for allergie in allergien:
+                lerne_von_off_ingredients(produkt, allergie)
+        else:
+            print(f"   ⚠️ Produkt gefunden, aber keine Allergene in OFF-DB")
 
-    # ── 2. Ollama-Fallback ────────────────────────────────────────────────────
+    # ── TIER 2: Lokale Synonym-DB (instant <100ms, statisch + gelernt) ───────
     if methode != "openfoodfacts":
-        ollama_funde = analyse_mit_ollama(text, allergien)
-        if ollama_funde:
-            funde = ollama_funde
-            methode = "ollama"
+        print(f"\n📖 TIER 2: Lokale Synonym-Matching (statisch + gelernt)")
+        synonym_funde = synonym_matching(text, allergien)
+        
+        if synonym_funde:
+            gefahr_funde_temp = [f for f in synonym_funde if not f.get("ist_spur")]
+            if gefahr_funde_temp:
+                print(f"   ✅ {len(gefahr_funde_temp)} DIREKTE Allergene gefunden!")
+            else:
+                print(f"   ⚠️ {len(synonym_funde)} Spurenhinweise gefunden")
+        else:
+            print(f"   ℹ️  Keine Allergene per Textanalyse gefunden")
+        
+        # ── TIER 3: Ollama KI (langsam ~2-3s, als Zusatzsicherheit) ────────
+        print(f"\n🤖 TIER 3: KI-Analyse (Ollama) als Zusatzsicherheit")
+        try:
+            ollama_funde_raw = analyse_mit_ollama(text, allergien)
+            print(f"   ✅ KI findet {len(ollama_funde_raw)} Allergene")
+            
+            # WICHTIG: Filtere Protein-Fehlerkennungen (z.B. "Milcheiweiß" als Ei)
+            ollama_funde = filtere_eiweiss_funde(ollama_funde_raw, text)
+            if len(ollama_funde) < len(ollama_funde_raw):
+                print(f"   🧹 {len(ollama_funde_raw) - len(ollama_funde)} False Positives gefiltert")
+            
+            # Kombiniere Funde (entferne Duplikate)
+            alle_funde = synonym_funde[:]
+            for ollama_fund in ollama_funde:
+                # Prüfe ob bereits gefunden (gleiche Allergie + ähnliches Synonym)
+                ist_duplikat = any(
+                    f['allergie'] == ollama_fund['allergie'] and 
+                    f['synonym'].lower()[:5] == ollama_fund['synonym'].lower()[:5]
+                    for f in alle_funde
+                )
+                if not ist_duplikat:
+                    alle_funde.append(ollama_fund)
+                    print(f"      🆕 KI findet zusätzlich: {ollama_fund['allergie']} ({ollama_fund['synonym']})")
+            
+            funde = alle_funde
+            methode = "synonym+ki" if synonym_funde and ollama_funde else ("synonym" if synonym_funde else ("ki" if ollama_funde else "synonym"))
+            
+        except Exception as e:
+            print(f"   ⚠️ KI-Analyse fehlgeschlagen: {e}")
+            funde = synonym_funde  # Fallback auf Synonym-Matching
+            methode = "synonym"
 
-    # ── 3. Lokales Synonym-Matching als letzter Fallback ──────────────────────
-    if methode not in ("openfoodfacts", "ollama"):
-        funde = synonym_matching(text, allergien)
-        methode = "synonym"
+    print(f"\n{'='*60}")
+    print(f"🎯 FINALE METHODE: {methode.upper()}")
+    print(f"{'='*60}\n")
 
     # ── Gesamturteil ──────────────────────────────────────────────────────────
     gefahr_funde = [f for f in funde if not f.get("ist_spur")]
