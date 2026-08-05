@@ -7,6 +7,107 @@ from config import SPUREN_PHRASEN, WORTGRENZE_SYNONYME
 from text_filter import extrahiere_zutaten_sektion
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# SYSTEMATISCHE FALSE-POSITIVE FILTER
+# ═══════════════════════════════════════════════════════════════════════════
+# Diese Begriffe enthalten Allergen-Wörter, sind aber KEINE Allergene!
+
+# PFLANZENMILCH = KEINE Milch! (laktosefrei, vegan)
+PFLANZENMILCH_BEGRIFFE = [
+    "mandelmilch", "hafermilch", "sojamilch", "reismilch", "kokosmilch",
+    "cashewmilch", "haselnussmilch", "macadamiamilch", "dinkelmilch",
+    "hirsemilch", "quinoamilch", "erbsenmilch", "lupinenmilch",
+    "hanfmilch", "tigernussmilch", "sesammilch",
+    # Englisch
+    "almond milk", "oat milk", "soy milk", "rice milk", "coconut milk",
+    "cashew milk", "hazelnut milk", "pea milk", "hemp milk",
+]
+
+# VEGANE/PFLANZLICHE BUTTER = KEINE Milch! (laktosefrei, vegan)
+VEGANE_BUTTER_BEGRIFFE = [
+    "vegane butter", "pflanzliche butter", "pflanzen butter",
+    "alsan", "rama", "becel", "flora",  # Bekannte Marken
+    "margarine",  # Oft pflanzlich (manchmal mit Milch, aber meist vegan)
+    "kokosfett", "kokosöl", "palmfett",  # Pflanzliche Fett-Alternativen
+    "pflanzenfett", "pflanzliches fett",
+    # Englisch
+    "vegan butter", "plant butter", "plant-based butter",
+]
+
+# PFLANZENPROTEIN = KEIN Ei! (bereits in eiweiss_filter.py, hier zur Vollständigkeit)
+PFLANZENPROTEIN_BEGRIFFE = [
+    "sojaeiweiß", "sojaeiweiss", "erbsenprotein", "erbseneiweiß",
+    "reisprotein", "hanfprotein", "lupineneiweiß",
+    "pflanzenprotein", "pflanzeneiweiß", "pflanzliches protein",
+]
+
+# PSEUDO-GETREIDE = KEIN Gluten! (trotz "weizen", "korn" im Namen)
+GLUTENFREIE_PSEUDOGETREIDE = [
+    "buchweizen",  # KEIN Weizen! Kein Gluten!
+    "amaranth", "amarant",  # Pseudogetreide, glutenfrei
+    "quinoa",  # Pseudogetreide, glutenfrei
+    "hirse",  # Glutenfrei (obwohl Getreide)
+    "teff",  # Glutenfrei
+    "buckwheat",  # Englisch für Buchweizen
+]
+
+# NUSS-UNABHÄNGIGE BEGRIFFE = KEINE Nuss! 
+KEINE_NUSS_BEGRIFFE = [
+    "kokosnuss", "muskatnuss", "erdnuss",  # Botanisch keine Nüsse (aber Allergen!)
+    # Diese SIND Allergene, werden separat gehandelt
+]
+
+
+def ist_false_positive(allergen: str, synonym: str, fundstelle: str) -> bool:
+    """
+    SYSTEMATISCHER Filter: Prüft ob ein Fund ein False Positive ist.
+    
+    Beispiele:
+    - "milch" in "Mandelmilch" → True (False Positive, ist pflanzlich)
+    - "weizen" in "Buchweizen" → True (False Positive, ist glutenfrei)
+    - "milch" in "Vollmilch" → False (echte Milch!)
+    
+    Returns:
+        True = False Positive (Fund verwerfen!)
+        False = Echter Allergen-Fund
+    """
+    allergen_lower = allergen.lower()
+    synonym_lower = synonym.lower()
+    fundstelle_lower = fundstelle.lower()
+    
+    # ─────────────────────────────────────────────────────────────────────
+    # FILTER 1: PFLANZENMILCH + VEGANE BUTTER (mandelmilch, vegane butter, etc.)
+    # ─────────────────────────────────────────────────────────────────────
+    if allergen_lower in ["milch", "lactose", "laktose", "milk", "butter"]:
+        # Prüfe Pflanzenmilch
+        for pflanzenmilch in PFLANZENMILCH_BEGRIFFE:
+            if pflanzenmilch in synonym_lower or pflanzenmilch in fundstelle_lower:
+                return True  # False Positive!
+        
+        # Prüfe vegane/pflanzliche Butter
+        for vegane_butter in VEGANE_BUTTER_BEGRIFFE:
+            if vegane_butter in synonym_lower or vegane_butter in fundstelle_lower:
+                return True  # False Positive!
+    
+    # ─────────────────────────────────────────────────────────────────────
+    # FILTER 2: PSEUDO-GETREIDE (buchweizen, quinoa, amaranth)
+    # ─────────────────────────────────────────────────────────────────────
+    if allergen_lower in ["gluten", "weizen", "wheat"]:
+        for pseudo in GLUTENFREIE_PSEUDOGETREIDE:
+            if pseudo in synonym_lower or pseudo in fundstelle_lower:
+                return True  # False Positive!
+    
+    # ─────────────────────────────────────────────────────────────────────
+    # FILTER 3: PFLANZENPROTEIN (sojaeiweiß, erbsenprotein)
+    # ─────────────────────────────────────────────────────────────────────
+    if allergen_lower in ["ei", "egg", "eier"]:
+        for pflanzenprotein in PFLANZENPROTEIN_BEGRIFFE:
+            if pflanzenprotein in synonym_lower or pflanzenprotein in fundstelle_lower:
+                return True  # False Positive!
+    
+    return False  # Kein False Positive → echter Fund!
+
+
 def synonyme_fuer(allergen: str) -> list[str]:
     """
     Gibt die Liste der Synonyme für ein Allergen zurück.
@@ -95,6 +196,22 @@ def synonym_matching(text: str, user_allergien: list[str]) -> list[dict]:
             if not matches:
                 continue
             
+            # ═══════════════════════════════════════════════════════════════
+            # KRITISCHER FILTER: False Positives SOFORT aussortieren!
+            # ═══════════════════════════════════════════════════════════════
+            # Extrahiere Fundstelle für False-Positive-Check
+            erste_pos = matches[0].start()
+            zeile_start = zutaten_text.rfind('\n', 0, erste_pos)
+            zeile_start = 0 if zeile_start == -1 else zeile_start + 1
+            zeile_end = zutaten_text.find('\n', erste_pos)
+            zeile_end = len(zutaten_text) if zeile_end == -1 else zeile_end
+            fundstelle_temp = zutaten_text[zeile_start:zeile_end].strip()
+            
+            # SYSTEMATISCHER CHECK: Ist das ein False Positive?
+            if ist_false_positive(allergie, synonym, fundstelle_temp):
+                print(f"   🧹 FALSE POSITIVE gefiltert: '{synonym}' in '{fundstelle_temp[:60]}...'")
+                continue  # Überspringe diesen Fund!
+            
             # FILTER: Überspringe Nährwerttabellen-Kontext (z.B. "Eiweiß 14 g")
             if synonym == "eiweiß":
                 # Prüfe ob das Pattern "Eiweiß X g" oder "Eiweiß X gramm" ist
@@ -118,17 +235,8 @@ def synonym_matching(text: str, user_allergien: list[str]) -> list[dict]:
                     ist_spur = True
                     break  # Wir wissen jetzt, es ist eine Spur
             
-            # Fundstelle: Extrahiere die Zeile der ersten Position
-            erste_pos = matches[0].start()
-            zeile_start = zutaten_text.rfind('\n', 0, erste_pos)
-            zeile_start = 0 if zeile_start == -1 else zeile_start + 1
-            
-            zeile_end = zutaten_text.find('\n', erste_pos)
-            zeile_end = len(zutaten_text) if zeile_end == -1 else zeile_end
-            
-            fundstelle = zutaten_text[zeile_start:zeile_end].strip()
-            if not fundstelle:
-                fundstelle = zutaten_text[:100].strip() + "..."
+            # Fundstelle wurde bereits oben für False-Positive-Check extrahiert
+            fundstelle = fundstelle_temp if fundstelle_temp else zutaten_text[:100].strip() + "..."
             
             # Gefunden! Sammle diesen Fund
             allergen_funde.append({

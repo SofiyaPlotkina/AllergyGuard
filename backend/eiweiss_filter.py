@@ -3,6 +3,10 @@
 import re
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# SYSTEMATISCHE FALSE-POSITIVE FILTER (für KI-Funde)
+# ═══════════════════════════════════════════════════════════════════════════
+
 # Zusammengesetzte Wörter: [PRÄFIX]eiweiß = PROTEIN von [PRÄFIX], KEIN Ei!
 ZUSAMMENGESETZTE_PROTEIN_WOERTER = [
     "milcheiweiß", "milcheiweiss",         # Milchprotein (Milchallergie, nicht Ei!)
@@ -13,6 +17,33 @@ ZUSAMMENGESETZTE_PROTEIN_WOERTER = [
     "reiseiweiss", "reiseiweiß",           # Reisprotein (kein Ei!)
     "hanfeiweiss", "hanfeiweiß",           # Hanfprotein (kein Ei!)
     "weizeneiweiss", "weizeneiweiß",       # Weizenprotein/Gluten (Glutenallergie, nicht Ei!)
+]
+
+# PFLANZENMILCH = KEINE Milch! (laktosefrei, vegan)
+PFLANZENMILCH_BEGRIFFE = [
+    "mandelmilch", "hafermilch", "sojamilch", "reismilch", "kokosmilch",
+    "cashewmilch", "haselnussmilch", "macadamiamilch", "dinkelmilch",
+    "hirsemilch", "quinoamilch", "erbsenmilch", "lupinenmilch",
+    "hanfmilch", "tigernussmilch", "sesammilch",
+    # Englisch
+    "almond milk", "oat milk", "soy milk", "rice milk", "coconut milk",
+]
+
+# VEGANE/PFLANZLICHE BUTTER = KEINE Milch! (laktosefrei, vegan)
+VEGANE_BUTTER_BEGRIFFE = [
+    "vegane butter", "pflanzliche butter", "pflanzen butter",
+    "alsan", "rama", "becel", "flora",  # Bekannte Marken
+    "margarine",  # Oft pflanzlich
+    "kokosfett", "kokosöl", "palmfett",  # Pflanzliche Fett-Alternativen
+    "pflanzenfett", "pflanzliches fett",
+    # Englisch
+    "vegan butter", "plant butter", "plant-based butter",
+]
+
+# PSEUDO-GETREIDE = KEIN Gluten!
+GLUTENFREIE_PSEUDOGETREIDE = [
+    "buchweizen", "buckwheat",  # KEIN Weizen! Kein Gluten!
+    "amaranth", "amarant", "quinoa", "hirse", "teff",
 ]
 
 PROTEIN_KONTEXT_BEGRIFFE = [
@@ -80,7 +111,11 @@ def ist_protein_kontext(text: str, fundstelle: str) -> bool:
 
 def filtere_eiweiss_funde(funde: list[dict], original_text: str) -> list[dict]:
     """
-    Filtert Ollama-Funde: Entfernt 'eiweiß' wenn es im Protein-Kontext steht.
+    SYSTEMATISCHER Filter für KI-Funde: Entfernt False Positives.
+    
+    - Pflanzenmilch (Mandelmilch, Hafermilch) → KEINE Milch!
+    - Pseudo-Getreide (Buchweizen) → KEIN Gluten!
+    - Pflanzenprotein (Sojaeiweiß) → KEIN Ei!
     
     Returns:
         Gefilterte Funde-Liste
@@ -92,27 +127,64 @@ def filtere_eiweiss_funde(funde: list[dict], original_text: str) -> list[dict]:
         allergie = fund.get("allergie", "").lower()
         fundstelle = fund.get("fundstelle", "").lower()
         
-        # WICHTIG: "Milcheiweiß" etc. sind NIEMALS Ei-Allergene!
-        if allergie == "ei":
-            # Check 1: Ist das Synonym selbst ein zusammengesetztes Wort?
-            ist_zusammengesetzt = False
-            for zusammengesetzt in ZUSAMMENGESETZTE_PROTEIN_WOERTER:
-                # Nur im SYNONYM und FUNDSTELLE prüfen, NICHT im gesamten Text!
-                if zusammengesetzt in synonym or zusammengesetzt in fundstelle:
-                    print(f"   ❌ GEFILTERT: '{synonym}' in '{fundstelle[:60]}...' enthält '{zusammengesetzt}' → KEIN Ei!")
-                    ist_zusammengesetzt = True
+        soll_filtern = False
+        filter_grund = ""
+        
+        # ═════════════════════════════════════════════════════════════════
+        # FILTER 1: PFLANZENMILCH + VEGANE BUTTER
+        # ═════════════════════════════════════════════════════════════════
+        if allergie in ["milch", "milk", "lactose", "laktose", "butter"]:
+            # Check Pflanzenmilch
+            for pflanzenmilch in PFLANZENMILCH_BEGRIFFE:
+                if pflanzenmilch in synonym or pflanzenmilch in fundstelle:
+                    soll_filtern = True
+                    filter_grund = f"Pflanzenmilch '{pflanzenmilch}' → KEINE Milch!"
                     break
             
-            if ist_zusammengesetzt:
-                continue  # Überspringe diesen Fund
-            
-            # Check 2: Ist es "eiweiß" im Protein-Kontext (Produktbeschreibung)?
-            if synonym == "eiweiß":
-                if ist_protein_kontext(original_text, fundstelle):
-                    print(f"   ❌ GEFILTERT: '{synonym}' ist Protein, kein Ei-Allergen")
-                    continue  # Überspringe
+            # Check vegane/pflanzliche Butter
+            if not soll_filtern:
+                for vegane_butter in VEGANE_BUTTER_BEGRIFFE:
+                    if vegane_butter in synonym or vegane_butter in fundstelle:
+                        soll_filtern = True
+                        filter_grund = f"Vegane Butter '{vegane_butter}' → KEINE Milch!"
+                        break
+                    break
         
-        # Behalte alle anderen Funde
+        # ═════════════════════════════════════════════════════════════════
+        # FILTER 2: PSEUDO-GETREIDE (buchweizen, quinoa, amaranth)
+        # ═════════════════════════════════════════════════════════════════
+        if allergie in ["gluten", "weizen", "wheat"]:
+            for pseudo in GLUTENFREIE_PSEUDOGETREIDE:
+                if pseudo in synonym or pseudo in fundstelle:
+                    soll_filtern = True
+                    filter_grund = f"Pseudo-Getreide '{pseudo}' → KEIN Gluten!"
+                    break
+        
+        # ═════════════════════════════════════════════════════════════════
+        # FILTER 3: PFLANZENPROTEIN (sojaeiweiß, erbsenprotein)
+        # ═════════════════════════════════════════════════════════════════
+        if allergie == "ei":
+            # Check 3a: Zusammengesetzte Protein-Wörter
+            for zusammengesetzt in ZUSAMMENGESETZTE_PROTEIN_WOERTER:
+                if zusammengesetzt in synonym or zusammengesetzt in fundstelle:
+                    soll_filtern = True
+                    filter_grund = f"Pflanzenprotein '{zusammengesetzt}' → KEIN Ei!"
+                    break
+            
+            # Check 3b: "eiweiß" im Protein-Kontext (Produktbeschreibung)
+            if not soll_filtern and synonym == "eiweiß":
+                if ist_protein_kontext(original_text, fundstelle):
+                    soll_filtern = True
+                    filter_grund = "Eiweiß in Protein-Kontext → KEIN Ei!"
+        
+        # ═════════════════════════════════════════════════════════════════
+        # ENTSCHEIDUNG: Filtern oder behalten?
+        # ═════════════════════════════════════════════════════════════════
+        if soll_filtern:
+            print(f"   ❌ GEFILTERT: '{synonym}' in '{fundstelle[:60]}...' → {filter_grund}")
+            continue  # Überspringe diesen Fund
+        
+        # Behalte diesen Fund
         gefiltert.append(fund)
     
     return gefiltert
