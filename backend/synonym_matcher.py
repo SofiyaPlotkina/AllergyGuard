@@ -18,9 +18,13 @@ PFLANZENMILCH_BEGRIFFE = [
     "cashewmilch", "haselnussmilch", "macadamiamilch", "dinkelmilch",
     "hirsemilch", "quinoamilch", "erbsenmilch", "lupinenmilch",
     "hanfmilch", "tigernussmilch", "sesammilch",
+    # "drink" Varianten (z.B. Haferdrink statt Hafermilch)
+    "mandeldrink", "haferdrink", "sojadrink", "reisdrink", "kokosdrink",
+    "cashewdrink", "haselnussdrink", "dinkeldrink",
     # Englisch
     "almond milk", "oat milk", "soy milk", "rice milk", "coconut milk",
     "cashew milk", "hazelnut milk", "pea milk", "hemp milk",
+    "almond drink", "oat drink", "soy drink", "rice drink", "coconut drink",
 ]
 
 # VEGANE/PFLANZLICHE BUTTER = KEINE Milch! (laktosefrei, vegan)
@@ -56,6 +60,52 @@ KEINE_NUSS_BEGRIFFE = [
     "kokosnuss", "muskatnuss", "erdnuss",  # Botanisch keine Nüsse (aber Allergen!)
     # Diese SIND Allergene, werden separat gehandelt
 ]
+
+
+def hat_veganen_oder_glutenfreien_kontext(fundstelle: str, allergen: str) -> bool:
+    """
+    INTELLIGENTER KONTEXT-FILTER: Prüft ob "vegan(e)" oder "glutenfrei(e)" DAVOR steht.
+    
+    Beispiele:
+    - "vegane Sahne" → True (für Milch-Allergen)
+    - "glutenfreies Brot" → True (für Gluten-Allergen)
+    - "frische Sahne" → False
+    
+    Returns:
+        True = Vegan/Glutenfrei-Kontext gefunden (False Positive!)
+        False = Kein solcher Kontext
+    """
+    fundstelle_lower = fundstelle.lower()
+    allergen_lower = allergen.lower()
+    
+    # Marker für vegane/pflanzliche Produkte (blockiert Milch/Ei)
+    VEGAN_MARKER = [
+        "vegan", "vegane", "veganer", "veganes", "veganen",
+        "pflanzlich", "pflanzliche", "pflanzlicher", "pflanzliches", "pflanzlichen",
+        "plant-based", "plant based",
+    ]
+    
+    # Marker für glutenfreie Produkte (blockiert Gluten)
+    GLUTENFREI_MARKER = [
+        "glutenfrei", "glutenfreie", "glutenfreier", "glutenfreies", "glutenfreien",
+        "gluten-frei", "gluten frei",
+        "gluten-free", "gluten free",
+    ]
+    
+    # Prüfe VEGAN-Kontext für Milch/Ei
+    if allergen_lower in ["milch", "milk", "lactose", "laktose", "butter", "käse", "cheese", 
+                          "sahne", "cream", "ei", "egg", "eier"]:
+        for marker in VEGAN_MARKER:
+            if marker in fundstelle_lower:
+                return True  # Vegan = keine tierischen Produkte!
+    
+    # Prüfe GLUTENFREI-Kontext für Gluten
+    if allergen_lower in ["gluten", "weizen", "wheat", "gerste", "roggen", "hafer"]:
+        for marker in GLUTENFREI_MARKER:
+            if marker in fundstelle_lower:
+                return True  # Glutenfrei = kein Gluten!
+    
+    return False
 
 
 def ist_false_positive(allergen: str, synonym: str, fundstelle: str) -> bool:
@@ -104,6 +154,14 @@ def ist_false_positive(allergen: str, synonym: str, fundstelle: str) -> bool:
         for pflanzenprotein in PFLANZENPROTEIN_BEGRIFFE:
             if pflanzenprotein in synonym_lower or pflanzenprotein in fundstelle_lower:
                 return True  # False Positive!
+    
+    # ─────────────────────────────────────────────────────────────────────
+    # FILTER 4: KONTEXT-ANALYSE (vegan, glutenfrei)
+    # ─────────────────────────────────────────────────────────────────────
+    # SMART: Wenn "vegane Sahne" → KEINE Milch!
+    #        Wenn "glutenfreies Brot" → KEIN Gluten!
+    if hat_veganen_oder_glutenfreien_kontext(fundstelle, allergen):
+        return True  # False Positive durch Kontext!
     
     return False  # Kein False Positive → echter Fund!
 

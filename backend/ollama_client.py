@@ -13,6 +13,24 @@ def analyse_mit_ollama(text: str, user_allergien: list[str]) -> list[dict]:
     prompt = (
         f"Du bist ein Allergie-Assistent. Analysiere den folgenden Text und finde ALLERGENE für: {allergien_str}.\n\n"
         
+        f"🚨🚨🚨 ABSOLUT KRITISCH - KEINE HALLUZINATIONEN! 🚨🚨🚨\n"
+        f"▶ MELDE NUR Zutaten die TATSÄCHLICH im Text stehen!\n"
+        f"▶ ERFINDE NIEMALS Zutaten die NICHT im Text sind!\n"
+        f"▶ Wenn du unsicher bist → NICHT melden!\n"
+        f"▶ Beispiel: Text sagt 'glutenfreies Brot' → melde KEINE Milch!\n"
+        f"▶ Beispiel: Text sagt 'Haferdrink' → melde KEINE Kuhmilch!\n\n"
+        
+        f"🚨 KRITISCH - Vegan/Glutenfrei-Kontext:\n"
+        f"▶ Wenn 'vegan' oder 'pflanzlich' dabei steht → KEINE Milch/Ei!\n"
+        f"  Beispiele (NICHT melden):\n"
+        f"    ❌ 'vegane Sahne' → KEINE Milch!\n"
+        f"    ❌ 'veganer Frischkäse' → KEINE Milch!\n"
+        f"    ❌ 'pflanzliches Joghurt' → KEINE Milch!\n"
+        f"▶ Wenn 'glutenfrei' dabei steht → KEIN Gluten!\n"
+        f"  Beispiele (NICHT melden):\n"
+        f"    ❌ 'glutenfreies Brot' → KEIN Gluten!\n"
+        f"    ❌ 'glutenfreie Nudeln' → KEIN Gluten!\n\n"
+        
         f"🚨 KRITISCH - Unterscheide Nährstoffe von Allergenen:\n"
         f"▶ 'Eiweiß' in Produktbeschreibungen = Nährstoff (PROTEIN) → KEIN Ei-Allergen!\n"
         f"  Beispiele (NICHT als Ei melden):\n"
@@ -29,10 +47,12 @@ def analyse_mit_ollama(text: str, user_allergien: list[str]) -> list[dict]:
         f"    ✅ 'enthält: Eiklar, Eiweiß' → echtes Ei-Allergen!\n\n"
         
         f"🚨 KRITISCH - Pflanzenmilch vs. Tiermilch:\n"
-        f"▶ Pflanzenmilch (Mandelmilch, Hafermilch, etc.) = KEINE Milch-Allergen!\n"
+        f"▶ Pflanzenmilch (Mandelmilch, Hafermilch, Haferdrink, etc.) = KEINE Milch-Allergen!\n"
         f"  Beispiele (NICHT als Milch melden):\n"
         f"    ❌ 'Mandelmilch' → Pflanzendrink, KEINE Milch!\n"
         f"    ❌ 'Hafermilch' → Pflanzendrink, KEINE Milch!\n"
+        f"    ❌ 'Haferdrink' → Pflanzendrink, KEINE Milch!\n"
+        f"    ❌ 'Sojadrink' → Pflanzendrink, KEINE Milch!\n"
         f"    ❌ 'Sojamilch' → Pflanzendrink, KEINE Milch!\n"
         f"    ❌ 'Kokosmilch' → Pflanzendrink, KEINE Milch!\n"
         f"▶ Vegane/pflanzliche Butter = KEINE Milch-Allergen!\n"
