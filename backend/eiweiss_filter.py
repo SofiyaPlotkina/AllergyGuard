@@ -44,6 +44,25 @@ VEGANE_BUTTER_BEGRIFFE = [
     "vegan butter", "plant butter", "plant-based butter",
 ]
 
+# NUSS-/PFLANZENBASIS = KEINE Milch! (z.B. "Auf Basis von gerösteten Mandeln")
+NUSS_UND_PFLANZEN_BASIS = [
+    # Nüsse
+    "mandel", "hasel", "cashew", "walnuss", "erdnuss", "macadamia", "pekan", "pistazie",
+    # Samen
+    "sesam", "sonnenblumen", "kürbiskern", "leinsamen", "chia",
+    # Hülsenfrüchte
+    "soja", "erbse", "lupine", "kicher",
+    # Getreide/Pseudo-Getreide
+    "hafer", "reis", "kokos", "dinkel", "hirse", "quinoa",
+    # Englisch
+    "almond", "hazelnut", "cashew", "walnut", "peanut", "oat", "soy", "pea",
+]
+
+PFLANZENBASIS_MARKER = [
+    "auf basis von", "basis von", "basis:", "hergestellt aus",
+    "made from", "based on", "contains", "aus",
+]
+
 # PSEUDO-GETREIDE = KEIN Gluten!
 GLUTENFREIE_PSEUDOGETREIDE = [
     "buchweizen", "buckwheat",  # KEIN Weizen! Kein Gluten!
@@ -181,6 +200,13 @@ def filtere_eiweiss_funde(funde: list[dict], original_text: str) -> list[dict]:
         filter_grund = ""
         
         # ═════════════════════════════════════════════════════════════════
+        # FILTER 0: LEERE FUNDSTELLEN (KI meldet manchmal leeren String)
+        # ═════════════════════════════════════════════════════════════════
+        if not fundstelle or not fundstelle.strip():
+            soll_filtern = True
+            filter_grund = "Leere Fundstelle → ungültiger Fund!"
+        
+        # ═════════════════════════════════════════════════════════════════
         # FILTER 1: PFLANZENMILCH + VEGANE BUTTER
         # ═════════════════════════════════════════════════════════════════
         if allergie in ["milch", "milk", "lactose", "laktose", "butter"]:
@@ -198,7 +224,19 @@ def filtere_eiweiss_funde(funde: list[dict], original_text: str) -> list[dict]:
                         soll_filtern = True
                         filter_grund = f"Vegane Butter '{vegane_butter}' → KEINE Milch!"
                         break
-                    break
+            
+            # Check "auf Basis von" + Nüssen/Pflanzen
+            if not soll_filtern:
+                for marker in PFLANZENBASIS_MARKER:
+                    if marker in fundstelle:
+                        # Prüfe ob danach eine Nuss/Pflanze kommt
+                        for pflanze in NUSS_UND_PFLANZEN_BASIS:
+                            if pflanze in fundstelle:
+                                soll_filtern = True
+                                filter_grund = f"'{marker} {pflanze}' → pflanzliche Basis, KEINE Milch!"
+                                break
+                        if soll_filtern:
+                            break
         
         # ═════════════════════════════════════════════════════════════════
         # FILTER 2: PSEUDO-GETREIDE (buchweizen, quinoa, amaranth)
