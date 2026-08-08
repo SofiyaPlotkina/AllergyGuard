@@ -12,8 +12,7 @@ from synonym_matcher import synonyme_fuer, synonym_matching
 from openfoodfacts_client import suche_off, off_allergene_pruefen
 from ollama_client import analyse_mit_ollama
 from synonym_learner import lerne_synonym, lerne_von_ollama_funden, lerne_von_off_ingredients
-from ambiguity_checker import braucht_ki_check
-from eiweiss_filter import filtere_eiweiss_funde
+from filters import filtere_funde
 
 app = FastAPI()
 
@@ -208,7 +207,7 @@ def check_recipe(request: RecipeRequest):
             print(f"   ✅ KI findet {len(ollama_funde_raw)} Allergene")
             
             # WICHTIG: Filtere Protein-Fehlerkennungen (z.B. "Milcheiweiß" als Ei)
-            ollama_funde = filtere_eiweiss_funde(ollama_funde_raw, text)
+            ollama_funde = filtere_funde(ollama_funde_raw, text)
             if len(ollama_funde) < len(ollama_funde_raw):
                 print(f"   🧹 {len(ollama_funde_raw) - len(ollama_funde)} False Positives gefiltert")
             

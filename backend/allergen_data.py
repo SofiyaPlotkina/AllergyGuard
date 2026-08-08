@@ -163,9 +163,6 @@ ALLERGEN_SYNONYME: dict[str, list[str]] = {
         "weizenmehl", "vollkornmehl", "type 405", "type 550", "type 1050",
         "grieß", "hartweizengrieß",
         "semmelbrösel", "paniermehl", "panko", "tempuramehl",
-        "backpulver",            # kann Weizenstärke enthalten
-        "speisestärke",          # oft Weizenstärke
-        "stärke",                # ohne Angabe oft Weizen
         # ── Brot & Backwaren ──
         "brot", "vollkornbrot", "weißbrot", "toastbrot",
         "brötchen", "semmel", "schrippe",  # Österreich/Berlin
