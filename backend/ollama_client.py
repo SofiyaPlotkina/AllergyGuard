@@ -3,8 +3,12 @@
 import json
 import re
 import requests
+import logging
 
 from config import OLLAMA_MODEL, OLLAMA_URL
+from filters import ist_false_positive
+
+logger = logging.getLogger(__name__)
 
 
 def analyse_mit_ollama(text: str, user_allergien: list[str]) -> list[dict]:
@@ -13,77 +17,107 @@ def analyse_mit_ollama(text: str, user_allergien: list[str]) -> list[dict]:
     prompt = (
         f"Du bist ein Allergie-Assistent. Analysiere den folgenden Text und finde ALLERGENE für: {allergien_str}.\n\n"
         
-        f"🚨🚨🚨 ABSOLUT KRITISCH - KEINE HALLUZINATIONEN! 🚨🚨🚨\n"
-        f"▶ MELDE NUR Zutaten die TATSÄCHLICH im Text stehen!\n"
-        f"▶ ERFINDE NIEMALS Zutaten die NICHT im Text sind!\n"
-        f"▶ Wenn du unsicher bist → NICHT melden!\n"
-        f"▶ Beispiel: Text sagt 'glutenfreies Brot' → melde KEINE Milch!\n"
-        f"▶ Beispiel: Text sagt 'Haferdrink' → melde KEINE Kuhmilch!\n\n"
+        f"[CRITICAL] ABSOLUT KRITISCH - KEINE HALLUZINATIONEN!\n"
+        f"> MELDE NUR Zutaten die TATSÄCHLICH im Text stehen!\n"
+        f"> ERFINDE NIEMALS Zutaten die NICHT im Text sind!\n"
+        f"> Wenn du unsicher bist, NICHT melden!\n"
+        f"> Beispiel: Text sagt 'glutenfreies Brot', melde KEINE Milch!\n"
+        f"> Beispiel: Text sagt 'Haferdrink', melde KEINE Kuhmilch!\n\n"
         
-        f"🚨 KRITISCH - Vegan/Glutenfrei-Kontext:\n"
-        f"▶ Wenn 'vegan' oder 'pflanzlich' dabei steht → KEINE Milch/Ei!\n"
+        f"[CRITICAL] Vegan/Glutenfrei-Kontext:\n"
+        f"> Wenn 'vegan' oder 'pflanzlich' dabei steht, KEINE Milch/Ei!\n"
         f"  Beispiele (NICHT melden):\n"
-        f"    ❌ 'vegane Sahne' → KEINE Milch!\n"
-        f"    ❌ 'veganer Frischkäse' → KEINE Milch!\n"
-        f"    ❌ 'pflanzliches Joghurt' → KEINE Milch!\n"
-        f"▶ Wenn 'glutenfrei' dabei steht → KEIN Gluten!\n"
+        f"    [NO] 'vegane Sahne', KEINE Milch!\n"
+        f"    [NO] 'veganer Frischkäse', KEINE Milch!\n"
+        f"    [NO] 'pflanzliches Joghurt', KEINE Milch!\n"
+        f"> Wenn 'glutenfrei' dabei steht, KEIN Gluten!\n"
         f"  Beispiele (NICHT melden):\n"
-        f"    ❌ 'glutenfreies Brot' → KEIN Gluten!\n"
-        f"    ❌ 'glutenfreie Nudeln' → KEIN Gluten!\n\n"
+        f"    [NO] 'glutenfreies Brot', KEIN Gluten!\n"
+        f"    [NO] 'glutenfreie Nudeln', KEIN Gluten!\n\n"
         
-        f"🚨 KRITISCH - Unterscheide Nährstoffe von Allergenen:\n"
-        f"▶ 'Eiweiß' in Produktbeschreibungen = Nährstoff (PROTEIN) → KEIN Ei-Allergen!\n"
+        f"[CRITICAL] Unterscheide Nährstoffe von Allergenen:\n"
+        f"> 'Eiweiß' in Produktbeschreibungen = Nährstoff (PROTEIN), KEIN Ei-Allergen!\n"
         f"  Beispiele (NICHT als Ei melden):\n"
-        f"    ❌ 'Riegel mit Eiweiß' → Protein, KEIN Ei!\n"
-        f"    ❌ 'hoher Eiweißgehalt' → Protein, KEIN Ei!\n"
-        f"    ❌ '34% Protein / Eiweiß' → Nährstoffangabe, KEIN Ei!\n"
-        f"    ❌ 'reich an Eiweiß' → Protein, KEIN Ei!\n"
-        f"    ❌ 'MILCHEIWEISS' → Milch-Protein, KEIN Ei!\n"
-        f"    ❌ 'Molkeneiweiss' → Molken-Protein, KEIN Ei!\n"
-        f"    ❌ 'Sojaeiweiß' → Soja-Protein, KEIN Ei!\n"
-        f"▶ 'Eiweiß' in ZUTATENLISTEN = Ei-Produkt → Allergen melden!\n"
+        f"    [NO] 'Riegel mit Eiweiß', Protein, KEIN Ei!\n"
+        f"    [NO] 'hoher Eiweißgehalt', Protein, KEIN Ei!\n"
+        f"    [NO] '34% Protein / Eiweiß', Nährstoffangabe, KEIN Ei!\n"
+        f"    [NO] 'reich an Eiweiß', Protein, KEIN Ei!\n"
+        f"    [NO] 'MILCHEIWEISS', Milch-Protein, KEIN Ei!\n"
+        f"    [NO] 'Molkeneiweiss', Molken-Protein, KEIN Ei!\n"
+        f"    [NO] 'Sojaeiweiß', Soja-Protein, KEIN Ei!\n"
+        f"> 'Eiweiß' in ZUTATENLISTEN = Ei-Produkt, Allergen melden!\n"
         f"  Beispiele (ALS Ei melden):\n"
-        f"    ✅ 'Zutaten: Mehl, Eiweiß, Zucker' → echtes Ei-Allergen!\n"
-        f"    ✅ 'enthält: Eiklar, Eiweiß' → echtes Ei-Allergen!\n\n"
+        f"    [YES] 'Zutaten: Mehl, Eiweiß, Zucker', echtes Ei-Allergen!\n"
+        f"    [YES] 'enthält: Eiklar, Eiweiß', echtes Ei-Allergen!\n\n"
         
-        f"🚨 KRITISCH - Pflanzenmilch vs. Tiermilch:\n"
-        f"▶ Pflanzenmilch (Mandelmilch, Hafermilch, Haferdrink, etc.) = KEINE Milch-Allergen!\n"
+        f"[CRITICAL] Pflanzenmilch vs. Tiermilch:\n"
+        f"> Pflanzenmilch (Mandelmilch, Hafermilch, Haferdrink, etc.) = KEINE Milch-Allergen!\n"
         f"  Beispiele (NICHT als Milch melden):\n"
-        f"    ❌ 'Mandelmilch' → Pflanzendrink, KEINE Milch!\n"
-        f"    ❌ 'Hafermilch' → Pflanzendrink, KEINE Milch!\n"
-        f"    ❌ 'Haferdrink' → Pflanzendrink, KEINE Milch!\n"
-        f"    ❌ 'Sojadrink' → Pflanzendrink, KEINE Milch!\n"
-        f"    ❌ 'Sojamilch' → Pflanzendrink, KEINE Milch!\n"
-        f"    ❌ 'Kokosmilch' → Pflanzendrink, KEINE Milch!\n"
-        f"▶ 'Auf Basis von' + Nüssen/Pflanzenprodukten = KEINE Milch!\n"
+        f"    [NO] 'Mandelmilch', Pflanzendrink, KEINE Milch!\n"
+        f"    [NO] 'Hafermilch', Pflanzendrink, KEINE Milch!\n"
+        f"    [NO] 'Haferdrink', Pflanzendrink, KEINE Milch!\n"
+        f"    [NO] 'Sojadrink', Pflanzendrink, KEINE Milch!\n"
+        f"    [NO] 'Sojamilch', Pflanzendrink, KEINE Milch!\n"
+        f"    [NO] 'Kokosmilch', Pflanzendrink, KEINE Milch!\n"
+        f"> 'Auf Basis von' + Nüssen/Pflanzenprodukten = KEINE Milch!\n"
         f"  Beispiele (NICHT als Milch melden):\n"
-        f"    ❌ 'Auf Basis von gerösteten Mandeln' → KEINE Milch!\n"
-        f"    ❌ 'Auf Basis von Hafer' → KEINE Milch!\n"
-        f"    ❌ 'Basis: Soja' → KEINE Milch!\n"
-        f"    ❌ 'Hergestellt aus Cashews' → KEINE Milch!\n"
-        f"▶ Vegane/pflanzliche Butter = KEINE Milch-Allergen!\n"
+        f"    [NO] 'Auf Basis von gerösteten Mandeln', KEINE Milch!\n"
+        f"    [NO] 'Auf Basis von Hafer', KEINE Milch!\n"
+        f"    [NO] 'Basis: Soja', KEINE Milch!\n"
+        f"    [NO] 'Hergestellt aus Cashews', KEINE Milch!\n"
+        f"> Vegane/pflanzliche Butter = KEINE Milch-Allergen!\n"
         f"  Beispiele (NICHT als Milch melden):\n"
-        f"    ❌ 'vegane Butter' → Pflanzenfett, KEINE Milch!\n"
-        f"    ❌ 'pflanzliche Butter' → Pflanzenfett, KEINE Milch!\n"
-        f"    ❌ 'Margarine' → meist pflanzlich, KEINE Milch!\n"
-        f"    ❌ 'Kokosfett' → Pflanzenfett, KEINE Milch!\n"
-        f"▶ Tiermilch = Milch-Allergen melden!\n"
+        f"    [NO] 'vegane Butter', Pflanzenfett, KEINE Milch!\n"
+        f"    [NO] 'pflanzliche Butter', Pflanzenfett, KEINE Milch!\n"
+        f"    [NO] 'Margarine', meist pflanzlich, KEINE Milch!\n"
+        f"    [NO] 'Kokosfett', Pflanzenfett, KEINE Milch!\n"
+        f"    [NO] 'Kakaobutter', Pflanzenfett aus Kakao, KEINE Milch!\n"
+        f"    [NO] 'Kakao-butter', Pflanzenfett aus Kakao, KEINE Milch!\n"
+        f"    [NO] 'Sheabutter', Pflanzenfett, KEINE Milch!\n"
+        f"> Tiermilch = Milch-Allergen melden!\n"
         f"  Beispiele (ALS Milch melden):\n"
-        f"    ✅ 'VOLLMILCH' → echte Milch!\n"
-        f"    ✅ 'Kuhmilch' → echte Milch!\n"
-        f"    ✅ 'Butter' (ohne 'vegan') → echte Milch!\n\n"
+        f"    [YES] 'VOLLMILCH', echte Milch!\n"
+        f"    [YES] 'Kuhmilch', echte Milch!\n"
+        f"    [YES] 'Butter' (ohne 'vegan'/'pflanzlich'/'Kakao'), echte Milch!\n\n"
         
-        f"🚨 KRITISCH - Pseudo-Getreide vs. Gluten:\n"
-        f"▶ Pseudo-Getreide (Buchweizen, Quinoa, etc.) = KEIN Gluten!\n"
+        f"[CRITICAL] Pseudo-Getreide vs. Gluten:\n"
+        f"> Pseudo-Getreide (Buchweizen, Quinoa, etc.) = KEIN Gluten!\n"
         f"  Beispiele (NICHT als Gluten melden):\n"
-        f"    ❌ 'Buchweizen' → Pseudo-Getreide, KEIN Gluten!\n"
-        f"    ❌ 'Quinoa' → Pseudo-Getreide, KEIN Gluten!\n"
-        f"    ❌ 'Amaranth' → Pseudo-Getreide, KEIN Gluten!\n\n"
+        f"    [NO] 'Buchweizen', Pseudo-Getreide, KEIN Gluten!\n"
+        f"    [NO] 'Quinoa', Pseudo-Getreide, KEIN Gluten!\n"
+        f"    [NO] 'Amaranth', Pseudo-Getreide, KEIN Gluten!\n"
+        f"> N\u00dcSSE und SAMEN = KEIN Gluten!\n"
+        f"  Beispiele (NICHT als Gluten melden):\n"
+        f"    [NO] 'Mandeln', N\u00fcsse, KEIN Gluten!\n"
+        f"    [NO] 'Waln\u00fcsse', N\u00fcsse, KEIN Gluten!\n"
+        f"    [NO] 'Haseln\u00fcsse', N\u00fcsse, KEIN Gluten!\n"
+        f"    [NO] 'Cashewn\u00fcsse', N\u00fcsse, KEIN Gluten!\n"
+        f"    [NO] 'Paranuss', N\u00fcsse, KEIN Gluten!\n"
+        f"    [NO] 'Pekann\u00fcsse', N\u00fcsse, KEIN Gluten!\n"
+        f"    [NO] 'Macadamia', N\u00fcsse, KEIN Gluten!\n"
+        f"    [NO] 'Chiasamen', Samen, KEIN Gluten!\n"
+        f"    [NO] 'Leinsamen', Samen, KEIN Gluten!\n"
+        f"    [NO] 'Sonnenblumenkerne', Samen, KEIN Gluten!\n"
+        f"> Reis, Mais, Kartoffeln = KEIN Gluten!\n"
+        f"  Beispiele (NICHT als Gluten melden):\n"
+        f"    [NO] 'Reis', KEIN Gluten!\n"
+        f"    [NO] 'Reismehl', KEIN Gluten!\n"
+        f"    [NO] 'Mais', KEIN Gluten!\n"
+        f"    [NO] 'Maismehl', KEIN Gluten!\n"
+        f"    [NO] 'Kartoffelmehl', KEIN Gluten!\n"
+        f"    [NO] 'Kartoffelst\u00e4rke', KEIN Gluten!\n"
+        f"> Echtes Gluten-Getreide:\n"
+        f"  Beispiele (ALS Gluten melden):\n"
+        f"    [YES] 'Weizen', enth\u00e4lt Gluten!\n"
+        f"    [YES] 'Roggen', enth\u00e4lt Gluten!\n"
+        f"    [YES] 'Gerste', enth\u00e4lt Gluten!\n"
+        f"    [YES] 'Dinkel', enth\u00e4lt Gluten!\n"
+        f"    [YES] 'Hafer' (meist kontaminiert), enth\u00e4lt Gluten!\n\n"
         
-        f"🚨 WICHTIG - Keine Negativ-Meldungen:\n"
-        f"▶ Wenn ein Allergen NICHT gefunden wird → NICHT ins Array aufnehmen!\n"
-        f"▶ NIEMALS schreiben: 'kein X gefunden', 'kein Allergen', 'nicht vorhanden'\n"
-        f"▶ NUR ECHTE FUNDE ins JSON-Array!\n\n"
+        f"[IMPORTANT] Keine Negativ-Meldungen:\n"
+        f"> Wenn ein Allergen NICHT gefunden wird, NICHT ins Array aufnehmen!\n"
+        f"> NIEMALS schreiben: 'kein X gefunden', 'kein Allergen', 'nicht vorhanden'\n"
+        f"> NUR ECHTE FUNDE ins JSON-Array!\n\n"
         
         f"Weitere Regeln:\n"
         f"• Spuren-Hinweise: 'kann Spuren enthalten' → ist_spur=true\n"
@@ -116,16 +150,34 @@ def analyse_mit_ollama(text: str, user_allergien: list[str]) -> list[dict]:
         m = re.search(r'\[.*\]', raw, re.DOTALL)
         if m:
             funde = json.loads(m.group(0))
-            # POST-PROCESSING: Filtere "kein X gefunden" Einträge
+            # POST-PROCESSING: Filtere "kein X gefunden" Einträge UND False Positives
             gefilterte_funde = []
             for fund in funde:
                 synonym = (fund.get("synonym") or "").lower()
+                allergie = (fund.get("allergie") or "").lower()
+                fundstelle = (fund.get("fundstelle") or "")
+                
                 # Filtere negative/informative Einträge
                 if any(neg in synonym for neg in ["kein", "nicht gefunden", "nicht vorhanden", "keine"]):
-                    print(f"⚠️ Ollama-Müll gefiltert: '{synonym}'")
+                    logger.warning(f"Ollama junk filtered: '{synonym}'")
                     continue
+                
+                # KRITISCH: False-Positive-Filter anwenden (z.B. Vanilleschote ≠ Ei)
+                if ist_false_positive(allergie, synonym, fundstelle):
+                    logger.info(f"Ollama false-positive filtered: '{synonym}' for {allergie}")
+                    continue
+                
                 gefilterte_funde.append(fund)
             return gefilterte_funde
-    except Exception:
-        pass
+            
+    except requests.RequestException as e:
+        logger.error(f"Ollama API request failed: {e}")
+        return []
+    except json.JSONDecodeError as e:
+        logger.error(f"Ollama response parsing failed: {e}")
+        return []
+    except Exception as e:
+        logger.error(f"Unexpected error in Ollama analysis: {e}")
+        return []
+    
     return []

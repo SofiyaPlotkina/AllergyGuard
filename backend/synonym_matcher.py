@@ -1,22 +1,27 @@
 """Synonym matching functionality for allergen detection."""
 
 import re
+import logging
 
-from allergen_data import ALLERGEN_SYNONYME, ersatz_fuer
+from allergen_db import get_all_allergen_synonyms, get_replacement_for_term
 from config import SPUREN_PHRASEN, WORTGRENZE_SYNONYME
 from text_filter import extrahiere_zutaten_sektion
-from filters import ist_false_positive  
+from filters import ist_false_positive
+
+logger = logging.getLogger(__name__)  
 
 
 def synonyme_fuer(allergen: str) -> list[str]:
     """
     Gibt die Liste der Synonyme für ein Allergen zurück.
-    Kombiniert statische Synonyme + dynamisch gelernte.
+    Kombiniert DB-Synonyme + dynamisch gelernte.
     """
     key = allergen.lower().strip()
     synonyme = []
     
-    # 1. Statische Synonyme aus allergen_data.py
+    # 1. Synonyme aus Datenbank (migriert von allergen_data.py)
+    ALLERGEN_SYNONYME = get_all_allergen_synonyms()
+    
     if key in ALLERGEN_SYNONYME:
         synonyme.extend(ALLERGEN_SYNONYME[key])
     else:
@@ -29,8 +34,10 @@ def synonyme_fuer(allergen: str) -> list[str]:
         from synonym_learner import hole_gelernte_synonyme
         learned = hole_gelernte_synonyme(allergen)
         synonyme.extend(learned)
-    except Exception:
-        pass  # DB nicht verfügbar, nur statische nutzen
+    except ImportError:
+        logger.debug("synonym_learner module not available, using only static synonyms")
+    except Exception as e:
+        logger.warning(f"Failed to load learned synonyms: {e}")
     
     return synonyme if synonyme else [key]
 
@@ -62,10 +69,10 @@ def synonym_matching(text: str, user_allergien: list[str]) -> list[dict]:
     
     # Wenn keine Zutaten gefunden, analysiere nichts
     if not zutaten_text:
-        print("[synonym_matcher] ⚠️  Keine Zutaten-Sektion gefunden → kein Matching")
+        logger.warning("[synonym_matcher] No ingredients section found, no matching")
         return []
     
-    print(f"[synonym_matcher] ✅ Zutaten-Text ({len(zutaten_text)} Zeichen): {zutaten_text[:100]}...")
+    logger.debug(f"[synonym_matcher] Ingredients text ({len(zutaten_text)} chars): {zutaten_text[:100]}...")
     
     funde = []
     text_lower = zutaten_text.lower()  # NUR Zutaten analysieren!
@@ -107,10 +114,10 @@ def synonym_matching(text: str, user_allergien: list[str]) -> list[dict]:
             zeile_end = len(zutaten_text) if zeile_end == -1 else zeile_end
             fundstelle_temp = zutaten_text[zeile_start:zeile_end].strip()
             
-            # SYSTEMATISCHER CHECK: Ist das ein False Positive?
+            # SYSTEMATIC CHECK: Is this a false positive?
             if ist_false_positive(allergie, synonym, fundstelle_temp):
-                print(f"   🧹 FALSE POSITIVE gefiltert: '{synonym}' in '{fundstelle_temp[:60]}...'")
-                continue  # Überspringe diesen Fund!
+                logger.debug(f"FALSE POSITIVE filtered: '{synonym}' in '{fundstelle_temp[:60]}...'")
+                continue  # Skip this finding!
             
             # FILTER: Überspringe Nährwerttabellen-Kontext (z.B. "Eiweiß 14 g")
             if synonym == "eiweiß":
@@ -144,7 +151,7 @@ def synonym_matching(text: str, user_allergien: list[str]) -> list[dict]:
                 "synonym":    synonym,
                 "fundstelle": fundstelle,
                 "ist_spur":   ist_spur,
-                "ersatz":     ersatz_fuer(synonym),
+                "ersatz":     get_replacement_for_term(synonym),
             })
         
         # Wähle den BESTEN Fund für dieses Allergen:

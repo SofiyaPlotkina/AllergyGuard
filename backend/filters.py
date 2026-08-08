@@ -1,11 +1,12 @@
 """Zentrale Filter-Logik für Allergen-Detection."""
 
 import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 
-# ═══════════════════════════════════════════════════════════════════════════
 # FILTER-KONSTANTEN (einmal definiert, überall genutzt)
-# ═══════════════════════════════════════════════════════════════════════════
 
 # Pflanzenproteine die KEIN Ei sind
 PFLANZENPROTEIN_BEGRIFFE = [
@@ -13,6 +14,14 @@ PFLANZENPROTEIN_BEGRIFFE = [
     "sojaeiweiss", "sojaeiweiß", "pflanzeneiweiss", "pflanzeneiweiß",
     "erbseneiweiss", "erbseneiweiß", "reiseiweiss", "reiseiweiß",
     "hanfeiweiss", "hanfeiweiß", "weizeneiweiss", "weizeneiweiß",
+]
+
+# Vanille-Produkte die KEIN Ei enthalten (trotz "ei" in "Vanilleschote")
+VANILLE_BEGRIFFE = [
+    "vanille", "vanilleschote", "vanilleschoten", "vanilleextrakt",
+    "vanillezucker", "vanillearoma", "bourbon vanille", "vanillepaste",
+    "vanilla", "vanilla pod", "vanilla pods", "vanilla extract",
+    "vanilla sugar", "vanilla aroma", "vanilla paste",
 ]
 
 # Pflanzenmilch die KEINE Milch ist
@@ -119,6 +128,11 @@ def ist_false_positive(allergen: str, synonym: str, fundstelle: str) -> bool:
         for protein in PFLANZENPROTEIN_BEGRIFFE:
             if protein in synonym_lower or protein in fundstelle_lower:
                 return True
+        
+        # Filter 3b: Vanille (enthält "ei" aber kein Ei-Allergen)
+        for vanille in VANILLE_BEGRIFFE:
+            if vanille in synonym_lower or vanille in fundstelle_lower:
+                return True
     
     # Filter 4: Vegan/Glutenfrei-Kontext
     if allergen_lower in ["milch", "milk", "ei", "egg"]:
@@ -183,25 +197,25 @@ def filtere_funde(funde: list[dict], original_text: str = "") -> list[dict]:
         synonym = fund.get("synonym", "")
         fundstelle = fund.get("fundstelle", "")
         
-        # Leere Fundstellen verwerfen
+        # Discard empty findings
         if not fundstelle or not fundstelle.strip():
-            print(f"   ❌ GEFILTERT: Leere Fundstelle")
+            logger.debug("Empty finding location")
             continue
         
-        # Standard False-Positive-Check
+        # Standard false-positive check
         ist_fp = ist_false_positive(allergie, synonym, fundstelle)
         if ist_fp:
-            print(f"   ❌ GEFILTERT: '{synonym}' → False Positive")
+            logger.debug(f"'{synonym}' is false positive")
             continue
         
-        # Spezial-Check für "eiweiß" (nur wenn original_text gegeben)
+        # Special check for "eiweiß" (only if original_text provided)
         if allergie.lower() == "ei" and synonym.lower() == "eiweiß" and original_text:
             if ist_protein_kontext(original_text, fundstelle):
-                print(f"   ❌ GEFILTERT: 'eiweiß' → Protein-Kontext")
+                logger.debug("'eiweiß' is protein context")
                 continue
         
-        # Fund ist OK
+        # Finding is OK
         gefiltert.append(fund)
     
-    print(f"   ✅ {len(gefiltert)}/{len(funde)} Funde nach Filtern übrig")
+    logger.info(f"{len(gefiltert)}/{len(funde)} findings remaining after filters")
     return gefiltert

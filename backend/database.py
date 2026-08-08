@@ -1,8 +1,9 @@
 import sqlite3
+from config import DATABASE_PATH
 
 
 def db():
-    conn = sqlite3.connect('allergen.db')
+    conn = sqlite3.connect(DATABASE_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -49,6 +50,36 @@ def init_db():
             first_seen TEXT NOT NULL,
             last_seen TEXT NOT NULL,
             UNIQUE(allergen, synonym)
+        )
+    ''')
+    
+    # Tabelle für Allergen-Synonyme (Migration von allergen_data.py)
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS allergen_synonyms (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            allergen TEXT NOT NULL,
+            synonym TEXT NOT NULL,
+            language TEXT DEFAULT 'de',
+            category TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(allergen, synonym)
+        )
+    ''')
+    
+    # Index für schnelle Suche
+    conn.execute('''
+        CREATE INDEX IF NOT EXISTS idx_synonym_search 
+        ON allergen_synonyms(synonym, allergen)
+    ''')
+    
+    # Tabelle für Allergen-Ersatzvorschläge
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS allergen_replacements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            allergen_term TEXT NOT NULL UNIQUE,
+            replacement_de TEXT NOT NULL,
+            replacement_en TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     ''')
 
