@@ -102,8 +102,8 @@ def ist_false_positive(allergen: str, synonym: str, fundstelle: str) -> bool:
     Prüft ob ein Fund ein False Positive ist.
     
     Returns:
-        (True, grund) wenn False Positive
-        (False, "") wenn echter Fund
+        True wenn False Positive (Fund ignorieren)
+        False wenn echter Fund (Fund behalten)
     """
     allergen_lower = allergen.lower()
     synonym_lower = synonym.lower()
