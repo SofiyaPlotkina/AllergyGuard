@@ -1,7 +1,7 @@
 """Tests for filter logic (false positive detection)"""
 
 import pytest
-from backend.filters import ist_false_positive, ist_protein_kontext, filtere_funde
+from filters import ist_false_positive, ist_protein_kontext, filtere_funde
 
 
 class TestFalsePositiveDetection:

@@ -10,10 +10,12 @@ logger = logging.getLogger(__name__)
 
 # Pflanzenproteine die KEIN Ei sind
 PFLANZENPROTEIN_BEGRIFFE = [
-    "milcheiweiß", "milcheiweiss", "molkeneiweiß", "molkeneiweiss",
     "sojaeiweiss", "sojaeiweiß", "pflanzeneiweiss", "pflanzeneiweiß",
-    "erbseneiweiss", "erbseneiweiß", "reiseiweiss", "reiseiweiß",
-    "hanfeiweiss", "hanfeiweiß", "weizeneiweiss", "weizeneiweiß",
+    "erbseneiweiss", "erbseneiweiß", "erbsenprotein",
+    "reiseiweiss", "reiseiweiß", "reisprotein",
+    "hanfeiweiss", "hanfeiweiß", "hanfprotein",
+    "weizeneiweiss", "weizeneiweiß", "weizenprotein",
+    "lupinenprotein", "sonnenblumenprotein", "kartoffelprotein",
 ]
 
 # Vanille-Produkte die KEIN Ei enthalten (trotz "ei" in "Vanilleschote")
@@ -83,6 +85,13 @@ ZUTAT_KONTEXT_BEGRIFFE = [
     "vollei", "eigelb", "eiklar", "hühnerei",
 ]
 
+# Kontext der anzeigt, dass ein Allergen NICHT vorhanden ist (z.B. Ersatz/Negation)
+OHNE_KONTEXT_MARKER = [
+    "ohne ", "statt ", "ersetzt durch", "anstelle von", "anstatt ",
+    "anstatt von", "frei von", "without ", "instead of", "free from",
+    "free of",
+]
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # FILTER-FUNKTIONEN
@@ -99,9 +108,18 @@ def ist_false_positive(allergen: str, synonym: str, fundstelle: str) -> bool:
     allergen_lower = allergen.lower()
     synonym_lower = synonym.lower()
     fundstelle_lower = fundstelle.lower()
-    
-    # Filter 1: Pflanzenmilch
-    if allergen_lower in ["milch", "milk", "lactose", "laktose"]:
+
+    # Filter 0: Leere Fundstelle
+    if not fundstelle_lower.strip():
+        return True
+
+    # Filter 0b: Negations-/Ersatz-Kontext ("ohne Ei", "statt Butter", …)
+    for marker in OHNE_KONTEXT_MARKER:
+        if marker in fundstelle_lower:
+            return True
+
+    # Filter 1: Pflanzenmilch / vegane Butter
+    if allergen_lower in ["milch", "milk", "lactose", "laktose", "butter"]:
         for pflanze in PFLANZENMILCH_BEGRIFFE:
             if pflanze in synonym_lower or pflanze in fundstelle_lower:
                 return True
