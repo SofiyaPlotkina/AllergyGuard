@@ -13,7 +13,7 @@ from synonym_matcher import synonyme_fuer, synonym_matching
 from openfoodfacts_client import suche_off, off_allergene_pruefen
 from ollama_client import analyse_mit_ollama
 from synonym_learner import lerne_synonym, lerne_von_ollama_funden, lerne_von_off_ingredients
-from filters import filtere_funde
+# from filters import filtere_funde  # Nicht mehr benötigt - Filter in ollama_client.py
 
 # Configure logging
 logging.basicConfig(
@@ -318,49 +318,34 @@ def check_recipe(request: RecipeRequest):
 
     # TIER 2: Local Synonym-DB (instant <100ms, static + learned)
     if methode != "openfoodfacts":
-        logger.info("[TIER 2] Local Synonym-Matching (static + learned)")
+        logger.info("[TIER 2] Local Synonym-Matching (PRIMARY METHOD)")
         synonym_funde = synonym_matching(text, allergien)
         
         if synonym_funde:
-            gefahr_funde_temp = [f for f in synonym_funde if not f.get("ist_spur")]
-            if gefahr_funde_temp:
-                logger.info(f"{len(gefahr_funde_temp)} DIRECT allergens found!")
-            else:
-                logger.warning(f"{len(synonym_funde)} trace warnings found")
-        else:
-            logger.info("No allergens found via text analysis")
-        
-        # TIER 3: Ollama AI (slow ~2-3s, as additional safety)
-        logger.info("[TIER 3] AI-Analysis (Ollama) as additional safety")
-        try:
-            ollama_funde_raw = analyse_mit_ollama(text, allergien)
-            logger.info(f"AI finds {len(ollama_funde_raw)} allergens")
-            
-            # IMPORTANT: Filter protein false positives (e.g. "Milcheiweiss" as egg)
-            ollama_funde = filtere_funde(ollama_funde_raw, text)
-            if len(ollama_funde) < len(ollama_funde_raw):
-                logger.info(f"{len(ollama_funde_raw) - len(ollama_funde)} false positives filtered")
-            
-            # Combine findings (remove duplicates)
-            alle_funde = synonym_funde[:]
-            for ollama_fund in ollama_funde:
-                # Check if already found (same allergy + similar synonym)
-                ist_duplikat = any(
-                    f['allergie'] == ollama_fund['allergie'] and 
-                    f['synonym'].lower()[:5] == ollama_fund['synonym'].lower()[:5]
-                    for f in alle_funde
-                )
-                if not ist_duplikat:
-                    alle_funde.append(ollama_fund)
-                    logger.info(f"AI finds additionally: {ollama_fund['allergie']} ({ollama_fund['synonym']})")
-            
-            funde = alle_funde
-            methode = "synonym+ki" if synonym_funde and ollama_funde else ("synonym" if synonym_funde else ("ki" if ollama_funde else "synonym"))
-            
-        except Exception as e:
-            logger.warning(f"AI analysis failed: {e}")
-            funde = synonym_funde  # Fallback to synonym matching
+            logger.info(f"{len(synonym_funde)} allergens found via synonym matching!")
+            funde = synonym_funde
             methode = "synonym"
+        else:
+            logger.info("No allergens found via synonym matching")
+            
+            # TIER 3: Ollama AI (slow ~2-3s, ONLY as last fallback)
+            logger.info("[TIER 3] AI-Analysis (Ollama) as LAST RESORT FALLBACK")
+            try:
+                ollama_funde = analyse_mit_ollama(text, allergien)
+                
+                if ollama_funde:
+                    logger.info(f"AI finds {len(ollama_funde)} allergens")
+                    funde = ollama_funde
+                    methode = "ki"
+                else:
+                    logger.info("AI also finds nothing - product is safe")
+                    funde = []
+                    methode = "synonym"  # Synonym-Matching war primär
+                    
+            except Exception as e:
+                logger.warning(f"AI analysis failed: {e}")
+                funde = []
+                methode = "synonym"
 
     logger.info(f"FINAL METHOD: {methode.upper()}")
 
