@@ -28,7 +28,7 @@ class TestExtrahiereZutatenSektion:
         assert extrahiere_zutaten_sektion(text) == text
 
     def test_langer_text_ohne_marker_wird_verworfen(self):
-        text = "Lorem ipsum dolor sit amet consectetur adipiscing elit. " * 20
+        text = "Lorem ipsum dolor sit amet consectetur adipiscing elit. " * 60
 
         assert extrahiere_zutaten_sektion(text) == ""
 
