@@ -1,21 +1,34 @@
 (function () {
-    function renderFund(fund, istSpur) {
+    function renderFundItem(fund, istSpur) {
         const termClass = istSpur ? 'found-term warn' : 'found-term';
         const ersatz = Array.isArray(fund.ersatz) && fund.ersatz.length
             ? `<div class="ersatz-box">
-                   <strong>💡 Mögliche Alternativen:</strong>
+                   <strong>💡 Alternativen:</strong>
                    ${fund.ersatz.map(eintrag => `• ${eintrag}`).join('<br>')}
                </div>`
             : '';
 
         return `
-            <div style="margin-bottom:8px;">
-                <span class="${termClass}">${fund.synonym}</span>
-                <span style="font-size:11px;color:#777;margin-left:4px;">(${fund.allergie})</span>
-                <div class="result-context">${fund.fundstelle}</div>
+            <div class="fund-item">
+                <div class="fund-header">
+                    <span class="${termClass}">• ${fund.synonym}</span>
+                </div>
+                <div class="fund-context">${fund.fundstelle}</div>
                 ${ersatz}
             </div>
         `;
+    }
+
+    function groupByAllergen(funde) {
+        const grouped = {};
+        for (const fund of funde) {
+            const allergen = fund.allergie;
+            if (!grouped[allergen]) {
+                grouped[allergen] = [];
+            }
+            grouped[allergen].push(fund);
+        }
+        return grouped;
     }
 
     function renderResult(data, container) {
@@ -54,13 +67,37 @@
             const gefahrFunde = funde.filter(fund => !fund.ist_spur);
             const spurenFunde = funde.filter(fund => fund.ist_spur);
 
+            // Gruppierte Anzeige nach Allergen
             if (gefahrFunde.length) {
-                bodyHTML += `<div class="label" style="margin-bottom:4px;">Direkt gefunden:</div>`;
-                bodyHTML += gefahrFunde.map(fund => renderFund(fund, false)).join('');
+                bodyHTML += `<div class="label" style="margin-bottom:8px;">Direkt gefunden:</div>`;
+                
+                const grouped = groupByAllergen(gefahrFunde);
+                for (const [allergen, fundsInGroup] of Object.entries(grouped)) {
+                    // Allergen-Header
+                    bodyHTML += `<div class="allergen-group">`;
+                    bodyHTML += `<div class="allergen-header">[${allergen}]</div>`;
+                    
+                    // Alle Funde für dieses Allergen
+                    for (const fund of fundsInGroup) {
+                        bodyHTML += renderFundItem(fund, false);
+                    }
+                    bodyHTML += `</div>`;
+                }
             }
+            
             if (spurenFunde.length) {
-                bodyHTML += `<div class="label" style="margin-bottom:4px;margin-top:${gefahrFunde.length ? 6 : 0}px;">Spurenhinweise:</div>`;
-                bodyHTML += spurenFunde.map(fund => renderFund(fund, true)).join('');
+                bodyHTML += `<div class="label" style="margin-bottom:8px;margin-top:${gefahrFunde.length ? 10 : 0}px;">Spurenhinweise:</div>`;
+                
+                const grouped = groupByAllergen(spurenFunde);
+                for (const [allergen, fundsInGroup] of Object.entries(grouped)) {
+                    bodyHTML += `<div class="allergen-group">`;
+                    bodyHTML += `<div class="allergen-header warn">[${allergen}]</div>`;
+                    
+                    for (const fund of fundsInGroup) {
+                        bodyHTML += renderFundItem(fund, true);
+                    }
+                    bodyHTML += `</div>`;
+                }
             }
         }
 
