@@ -3,17 +3,25 @@ from fastapi.middleware.cors import CORSMiddleware
 import datetime
 import json
 import re
+import logging
 
 from config import SPUREN_PHRASEN
 from database import db, init_db
 from models import ProfileRequest, RecipeRequest
-from allergen_data import ersatz_fuer
+from allergen_db import get_replacement_for_term, load_synonyms_into_cache
 from synonym_matcher import synonyme_fuer, synonym_matching
 from openfoodfacts_client import suche_off, off_allergene_pruefen
 from ollama_client import analyse_mit_ollama
 from synonym_learner import lerne_synonym, lerne_von_ollama_funden, lerne_von_off_ingredients
-from ambiguity_checker import braucht_ki_check
-from eiweiss_filter import filtere_eiweiss_funde
+from filters import filtere_funde
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -26,6 +34,7 @@ app.add_middleware(
 )
 
 init_db()
+load_synonyms_into_cache()  # Load allergen synonyms from DB into memory
 
 
 # ── Hilfsfunktionen ───────────────────────────────────────────────────────────
@@ -86,6 +95,23 @@ def extrahiere_produktnamen(text: str) -> list[str]:
 # ── Endpunkte ─────────────────────────────────────────────────────────────────
 @app.get("/profile")
 def get_profile():
+    """
+    Get the current user profile.
+    
+    Returns the user's name and allergen list. If no profile exists yet,
+    returns empty strings.
+    
+    Returns:
+        dict: Profile data with keys:
+            - name (str): User's name
+            - allergy (str): Comma-separated list of allergens
+    
+    Example response:
+        {
+            "name": "Max Mustermann",
+            "allergy": "ei,milch,nüsse"
+        }
+    """
     conn = db()
     user = conn.execute('SELECT name, allergy FROM users LIMIT 1').fetchone()
     conn.close()
@@ -96,6 +122,27 @@ def get_profile():
 
 @app.post("/profile")
 def save_profile(req: ProfileRequest):
+    """
+    Save or update the user profile.
+    
+    Creates a new user profile if none exists, otherwise updates the existing one.
+    Only one user profile is supported per database instance.
+    
+    Args:
+        req (ProfileRequest): Profile data containing:
+            - name (str): User's name
+            - allergy (str): Comma-separated allergen list (e.g., "ei,milch,nüsse")
+    
+    Returns:
+        dict: Status response with key:
+            - status (str): "ok" on success
+    
+    Example request body:
+        {
+            "name": "Max Mustermann",
+            "allergy": "ei,milch,nüsse"
+        }
+    """
     conn = db()
     existing = conn.execute('SELECT id FROM users LIMIT 1').fetchone()
     if existing:
@@ -110,6 +157,31 @@ def save_profile(req: ProfileRequest):
 
 @app.get("/history")
 def get_history():
+    """
+    Get the allergen check history.
+    
+    Returns the last 20 allergen checks performed by the user, ordered by
+    timestamp (most recent first).
+    
+    Returns:
+        list[dict]: List of history entries, each containing:
+            - id (int): Unique entry ID
+            - timestamp (str): ISO format timestamp
+            - ingredient_text (str): Text that was checked
+            - result (str): Check result ("SICHER", "WARNUNG", or "GEFAHR")
+            - detected_allergens (str): Comma-separated list of detected allergens
+    
+    Example response:
+        [
+            {
+                "id": 42,
+                "timestamp": "2024-01-15T14:30:00",
+                "ingredient_text": "Mehl, Eier, Zucker",
+                "result": "GEFAHR",
+                "detected_allergens": "ei"
+            }
+        ]
+    """
     conn = db()
     rows = conn.execute(
         'SELECT * FROM history ORDER BY timestamp DESC LIMIT 20'
@@ -120,6 +192,65 @@ def get_history():
 
 @app.post("/check-recipe")
 def check_recipe(request: RecipeRequest):
+    """
+    Check ingredient text for allergens using a 3-tier detection system.
+    
+    This is the core endpoint that performs allergen detection using:
+    - Tier 1: OpenFoodFacts database (external API, cached for 7 days)
+    - Tier 2: Local synonym matching (1200+ synonyms, <100ms)
+    - Tier 3: AI analysis with Ollama/Mistral (2-3s, as additional safety net)
+    
+    The system learns new synonyms automatically from successful detections
+    and applies false-positive filtering to reduce errors.
+    
+    Args:
+        request (RecipeRequest): Request data containing:
+            - ingredients (str): Product text, ingredient list, or barcode
+    
+    Returns:
+        dict: Detection result with keys:
+            - urteil (str): Overall assessment ("SICHER", "WARNUNG", or "GEFAHR")
+            - gefunden (str): Allergen synonym found (empty if safe)
+            - fundort (str): Location where allergen was found
+            - methode (str): Detection method used ("openfoodfacts", "synonym", "ki", or combined)
+            - allergien (list[str]): User's allergen list
+            - ersatzvorschlag (str): Replacement suggestions for detected allergen
+            - alle_funde (list[dict]): All detected allergens with details
+    
+    Example request body:
+        {
+            "ingredients": "Mehl, Eier, Zucker, Vanilleschote"
+        }
+    
+    Example response (allergen detected):
+        {
+            "urteil": "GEFAHR",
+            "gefunden": "eier",
+            "fundort": "Mehl, Eier, Zucker",
+            "methode": "synonym",
+            "allergien": ["ei", "milch"],
+            "ersatzvorschlag": "Leinsamen | Apfelmus | Banane | Chiasamen | Sojamehl",
+            "alle_funde": [
+                {
+                    "allergie": "ei",
+                    "synonym": "eier",
+                    "fundstelle": "Mehl, Eier, Zucker",
+                    "ist_spur": false
+                }
+            ]
+        }
+    
+    Example response (safe):
+        {
+            "urteil": "SICHER",
+            "gefunden": "",
+            "fundort": "",
+            "methode": "synonym",
+            "allergien": ["ei", "milch"],
+            "ersatzvorschlag": "",
+            "alle_funde": []
+        }
+    """
     conn = db()
     user = conn.execute('SELECT name, allergy FROM users LIMIT 1').fetchone()
     conn.close()
@@ -132,26 +263,24 @@ def check_recipe(request: RecipeRequest):
     text         = request.ingredients
     
     # DEBUG: Log KOMPLETTEN extrahierten Text
-    print(f"\n{'='*80}")
-    print(f"🔍 EMPFANGENER TEXT (KOMPLETT):")
-    print(f"{'='*80}")
-    print(text)
-    print(f"{'='*80}")
-    print(f"📊 Text-Länge: {len(text)} Zeichen | Zeilen: {len(text.splitlines())}")
-    print(f"👤 User: {user_name} | Allergien: {allergien}")
-    print(f"🔎 Suche nach 'cerealien': {'cerealien' in text.lower()}")
-    print(f"🔎 Suche nach 'allergen': {'allergen' in text.lower()}")
-    print(f"{'='*80}\n")
+    logger.debug("="*80)
+    logger.debug("[RECEIVED TEXT - COMPLETE]:")
+    logger.debug("="*80)
+    logger.debug(text)
+    logger.debug("="*80)
+    logger.info(f"Text length: {len(text)} chars | Lines: {len(text.splitlines())}")
+    logger.info(f"User: {user_name} | Allergies: {allergien}")
+    logger.debug(f"Search 'cerealien': {'cerealien' in text.lower()}")
+    logger.debug(f"Search 'allergen': {'allergen' in text.lower()}")
+    logger.debug("="*80)
 
     funde: list[dict] = []
     methode = "synonym"
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # SMART CASCADE: Schnell → Langsam, Lokal → Remote, Lernen bei jedem Schritt
-    # ══════════════════════════════════════════════════════════════════════════
+    # SMART CASCADE: Fast to Slow, Local to Remote, Learning at each step
 
-    # ── TIER 1: OpenFoodFacts (extern, cached, Synonym-Learning) ─────────────
-    print(f"\n🔬 TIER 1: OpenFoodFacts")
+    # TIER 1: OpenFoodFacts (external, cached, Synonym-Learning)
+    logger.info("[TIER 1] OpenFoodFacts")
     produkt = None
     
     # 1a) Barcode-Suche
@@ -159,7 +288,7 @@ def check_recipe(request: RecipeRequest):
     for barcode in barcodes:
         produkt = suche_off(barcode)
         if produkt and (produkt.get("allergens_tags") or produkt.get("ingredients_text")):
-            print(f"   ✅ Produkt via Barcode: {produkt.get('product_name', 'Unbekannt')}")
+            logger.info(f"Product via Barcode: {produkt.get('product_name', 'Unknown')}")
             break
         produkt = None
     
@@ -169,7 +298,7 @@ def check_recipe(request: RecipeRequest):
         for kandidat in kandidaten:
             produkt = suche_off(kandidat)
             if produkt and (produkt.get("allergens_tags") or produkt.get("ingredients_text")):
-                print(f"   ✅ Produkt via Name: {produkt.get('product_name')} ('{kandidat}')")
+                logger.info(f"Product via Name: {produkt.get('product_name')} ('{kandidat}')")
                 break
             produkt = None
     
@@ -179,43 +308,43 @@ def check_recipe(request: RecipeRequest):
         if off_funde:
             funde = off_funde
             methode = "openfoodfacts"
-            print(f"   ✅ {len(off_funde)} Allergene in OFF gefunden!")
+            logger.info(f"{len(off_funde)} allergens found in OFF!")
             
             # Lerne aus OFF ingredients_text
             for allergie in allergien:
                 lerne_von_off_ingredients(produkt, allergie)
         else:
-            print(f"   ⚠️ Produkt gefunden, aber keine Allergene in OFF-DB")
+            logger.warning("Product found, but no allergens in OFF-DB")
 
-    # ── TIER 2: Lokale Synonym-DB (instant <100ms, statisch + gelernt) ───────
+    # TIER 2: Local Synonym-DB (instant <100ms, static + learned)
     if methode != "openfoodfacts":
-        print(f"\n📖 TIER 2: Lokale Synonym-Matching (statisch + gelernt)")
+        logger.info("[TIER 2] Local Synonym-Matching (static + learned)")
         synonym_funde = synonym_matching(text, allergien)
         
         if synonym_funde:
             gefahr_funde_temp = [f for f in synonym_funde if not f.get("ist_spur")]
             if gefahr_funde_temp:
-                print(f"   ✅ {len(gefahr_funde_temp)} DIREKTE Allergene gefunden!")
+                logger.info(f"{len(gefahr_funde_temp)} DIRECT allergens found!")
             else:
-                print(f"   ⚠️ {len(synonym_funde)} Spurenhinweise gefunden")
+                logger.warning(f"{len(synonym_funde)} trace warnings found")
         else:
-            print(f"   ℹ️  Keine Allergene per Textanalyse gefunden")
+            logger.info("No allergens found via text analysis")
         
-        # ── TIER 3: Ollama KI (langsam ~2-3s, als Zusatzsicherheit) ────────
-        print(f"\n🤖 TIER 3: KI-Analyse (Ollama) als Zusatzsicherheit")
+        # TIER 3: Ollama AI (slow ~2-3s, as additional safety)
+        logger.info("[TIER 3] AI-Analysis (Ollama) as additional safety")
         try:
             ollama_funde_raw = analyse_mit_ollama(text, allergien)
-            print(f"   ✅ KI findet {len(ollama_funde_raw)} Allergene")
+            logger.info(f"AI finds {len(ollama_funde_raw)} allergens")
             
-            # WICHTIG: Filtere Protein-Fehlerkennungen (z.B. "Milcheiweiß" als Ei)
-            ollama_funde = filtere_eiweiss_funde(ollama_funde_raw, text)
+            # IMPORTANT: Filter protein false positives (e.g. "Milcheiweiss" as egg)
+            ollama_funde = filtere_funde(ollama_funde_raw, text)
             if len(ollama_funde) < len(ollama_funde_raw):
-                print(f"   🧹 {len(ollama_funde_raw) - len(ollama_funde)} False Positives gefiltert")
+                logger.info(f"{len(ollama_funde_raw) - len(ollama_funde)} false positives filtered")
             
-            # Kombiniere Funde (entferne Duplikate)
+            # Combine findings (remove duplicates)
             alle_funde = synonym_funde[:]
             for ollama_fund in ollama_funde:
-                # Prüfe ob bereits gefunden (gleiche Allergie + ähnliches Synonym)
+                # Check if already found (same allergy + similar synonym)
                 ist_duplikat = any(
                     f['allergie'] == ollama_fund['allergie'] and 
                     f['synonym'].lower()[:5] == ollama_fund['synonym'].lower()[:5]
@@ -223,19 +352,17 @@ def check_recipe(request: RecipeRequest):
                 )
                 if not ist_duplikat:
                     alle_funde.append(ollama_fund)
-                    print(f"      🆕 KI findet zusätzlich: {ollama_fund['allergie']} ({ollama_fund['synonym']})")
+                    logger.info(f"AI finds additionally: {ollama_fund['allergie']} ({ollama_fund['synonym']})")
             
             funde = alle_funde
             methode = "synonym+ki" if synonym_funde and ollama_funde else ("synonym" if synonym_funde else ("ki" if ollama_funde else "synonym"))
             
         except Exception as e:
-            print(f"   ⚠️ KI-Analyse fehlgeschlagen: {e}")
-            funde = synonym_funde  # Fallback auf Synonym-Matching
+            logger.warning(f"AI analysis failed: {e}")
+            funde = synonym_funde  # Fallback to synonym matching
             methode = "synonym"
 
-    print(f"\n{'='*60}")
-    print(f"🎯 FINALE METHODE: {methode.upper()}")
-    print(f"{'='*60}\n")
+    logger.info(f"FINAL METHOD: {methode.upper()}")
 
     # ── Gesamturteil ──────────────────────────────────────────────────────────
     gefahr_funde = [f for f in funde if not f.get("ist_spur")]
@@ -296,3 +423,11 @@ def check_recipe(request: RecipeRequest):
     conn.close()
 
     return result
+
+
+if __name__ == "__main__":
+    import uvicorn
+    from config import SERVER_HOST, SERVER_PORT
+    
+    logger.info(f"Starting AllergyGuard server on {SERVER_HOST}:{SERVER_PORT}")
+    uvicorn.run(app, host=SERVER_HOST, port=SERVER_PORT)

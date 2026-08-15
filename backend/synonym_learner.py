@@ -1,7 +1,10 @@
 """Dynamisches Synonym-Learning-System für verteilte Architektur."""
 
 import datetime
+import logging
 from database import db
+
+logger = logging.getLogger(__name__)
 
 
 def hole_gelernte_synonyme(allergen: str) -> list[str]:
@@ -49,14 +52,14 @@ def lerne_synonym(allergen: str, synonym: str, quelle: str):
             'UPDATE learned_synonyms SET confidence=?, last_seen=?, quelle=? WHERE id=?',
             (new_confidence, now, quelle, existing['id'])
         )
-        print(f"📚 Synonym gelernt (confidence {new_confidence}): '{synonym_lower}' → {allergen}")
+        logger.info(f"Synonym learned (confidence {new_confidence}): '{synonym_lower}' -> {allergen}")
     else:
-        # Neues Synonym
+        # New synonym
         conn.execute(
             'INSERT INTO learned_synonyms (allergen, synonym, quelle, first_seen, last_seen) VALUES (?,?,?,?,?)',
             (allergen_lower, synonym_lower, quelle, now, now)
         )
-        print(f"🆕 Neues Synonym gelernt: '{synonym_lower}' → {allergen} (via {quelle})")
+        logger.info(f"New synonym learned: '{synonym_lower}' -> {allergen} (via {quelle})")
     
     conn.commit()
     conn.close()

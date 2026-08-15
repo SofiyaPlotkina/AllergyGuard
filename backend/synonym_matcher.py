@@ -1,180 +1,27 @@
 """Synonym matching functionality for allergen detection."""
 
 import re
+import logging
 
-from allergen_data import ALLERGEN_SYNONYME, ersatz_fuer
+from allergen_db import get_all_allergen_synonyms, get_replacement_for_term
 from config import SPUREN_PHRASEN, WORTGRENZE_SYNONYME
 from text_filter import extrahiere_zutaten_sektion
+from filters import ist_false_positive
 
-
-# ═══════════════════════════════════════════════════════════════════════════
-# SYSTEMATISCHE FALSE-POSITIVE FILTER
-# ═══════════════════════════════════════════════════════════════════════════
-# Diese Begriffe enthalten Allergen-Wörter, sind aber KEINE Allergene!
-
-# PFLANZENMILCH = KEINE Milch! (laktosefrei, vegan)
-PFLANZENMILCH_BEGRIFFE = [
-    "mandelmilch", "hafermilch", "sojamilch", "reismilch", "kokosmilch",
-    "cashewmilch", "haselnussmilch", "macadamiamilch", "dinkelmilch",
-    "hirsemilch", "quinoamilch", "erbsenmilch", "lupinenmilch",
-    "hanfmilch", "tigernussmilch", "sesammilch",
-    # "drink" Varianten (z.B. Haferdrink statt Hafermilch)
-    "mandeldrink", "haferdrink", "sojadrink", "reisdrink", "kokosdrink",
-    "cashewdrink", "haselnussdrink", "dinkeldrink",
-    # Englisch
-    "almond milk", "oat milk", "soy milk", "rice milk", "coconut milk",
-    "cashew milk", "hazelnut milk", "pea milk", "hemp milk",
-    "almond drink", "oat drink", "soy drink", "rice drink", "coconut drink",
-]
-
-# VEGANE/PFLANZLICHE BUTTER = KEINE Milch! (laktosefrei, vegan)
-VEGANE_BUTTER_BEGRIFFE = [
-    "vegane butter", "pflanzliche butter", "pflanzen butter",
-    "alsan", "rama", "becel", "flora",  # Bekannte Marken
-    "margarine",  # Oft pflanzlich (manchmal mit Milch, aber meist vegan)
-    "kokosfett", "kokosöl", "palmfett",  # Pflanzliche Fett-Alternativen
-    "pflanzenfett", "pflanzliches fett",
-    # Englisch
-    "vegan butter", "plant butter", "plant-based butter",
-]
-
-# PFLANZENPROTEIN = KEIN Ei! (bereits in eiweiss_filter.py, hier zur Vollständigkeit)
-PFLANZENPROTEIN_BEGRIFFE = [
-    "sojaeiweiß", "sojaeiweiss", "erbsenprotein", "erbseneiweiß",
-    "reisprotein", "hanfprotein", "lupineneiweiß",
-    "pflanzenprotein", "pflanzeneiweiß", "pflanzliches protein",
-]
-
-# PSEUDO-GETREIDE = KEIN Gluten! (trotz "weizen", "korn" im Namen)
-GLUTENFREIE_PSEUDOGETREIDE = [
-    "buchweizen",  # KEIN Weizen! Kein Gluten!
-    "amaranth", "amarant",  # Pseudogetreide, glutenfrei
-    "quinoa",  # Pseudogetreide, glutenfrei
-    "hirse",  # Glutenfrei (obwohl Getreide)
-    "teff",  # Glutenfrei
-    "buckwheat",  # Englisch für Buchweizen
-]
-
-# NUSS-UNABHÄNGIGE BEGRIFFE = KEINE Nuss! 
-KEINE_NUSS_BEGRIFFE = [
-    "kokosnuss", "muskatnuss", "erdnuss",  # Botanisch keine Nüsse (aber Allergen!)
-    # Diese SIND Allergene, werden separat gehandelt
-]
-
-
-def hat_veganen_oder_glutenfreien_kontext(fundstelle: str, allergen: str) -> bool:
-    """
-    INTELLIGENTER KONTEXT-FILTER: Prüft ob "vegan(e)" oder "glutenfrei(e)" DAVOR steht.
-    
-    Beispiele:
-    - "vegane Sahne" → True (für Milch-Allergen)
-    - "glutenfreies Brot" → True (für Gluten-Allergen)
-    - "frische Sahne" → False
-    
-    Returns:
-        True = Vegan/Glutenfrei-Kontext gefunden (False Positive!)
-        False = Kein solcher Kontext
-    """
-    fundstelle_lower = fundstelle.lower()
-    allergen_lower = allergen.lower()
-    
-    # Marker für vegane/pflanzliche Produkte (blockiert Milch/Ei)
-    VEGAN_MARKER = [
-        "vegan", "vegane", "veganer", "veganes", "veganen",
-        "pflanzlich", "pflanzliche", "pflanzlicher", "pflanzliches", "pflanzlichen",
-        "plant-based", "plant based",
-    ]
-    
-    # Marker für glutenfreie Produkte (blockiert Gluten)
-    GLUTENFREI_MARKER = [
-        "glutenfrei", "glutenfreie", "glutenfreier", "glutenfreies", "glutenfreien",
-        "gluten-frei", "gluten frei",
-        "gluten-free", "gluten free",
-    ]
-    
-    # Prüfe VEGAN-Kontext für Milch/Ei
-    if allergen_lower in ["milch", "milk", "lactose", "laktose", "butter", "käse", "cheese", 
-                          "sahne", "cream", "ei", "egg", "eier"]:
-        for marker in VEGAN_MARKER:
-            if marker in fundstelle_lower:
-                return True  # Vegan = keine tierischen Produkte!
-    
-    # Prüfe GLUTENFREI-Kontext für Gluten
-    if allergen_lower in ["gluten", "weizen", "wheat", "gerste", "roggen", "hafer"]:
-        for marker in GLUTENFREI_MARKER:
-            if marker in fundstelle_lower:
-                return True  # Glutenfrei = kein Gluten!
-    
-    return False
-
-
-def ist_false_positive(allergen: str, synonym: str, fundstelle: str) -> bool:
-    """
-    SYSTEMATISCHER Filter: Prüft ob ein Fund ein False Positive ist.
-    
-    Beispiele:
-    - "milch" in "Mandelmilch" → True (False Positive, ist pflanzlich)
-    - "weizen" in "Buchweizen" → True (False Positive, ist glutenfrei)
-    - "milch" in "Vollmilch" → False (echte Milch!)
-    
-    Returns:
-        True = False Positive (Fund verwerfen!)
-        False = Echter Allergen-Fund
-    """
-    allergen_lower = allergen.lower()
-    synonym_lower = synonym.lower()
-    fundstelle_lower = fundstelle.lower()
-    
-    # ─────────────────────────────────────────────────────────────────────
-    # FILTER 1: PFLANZENMILCH + VEGANE BUTTER (mandelmilch, vegane butter, etc.)
-    # ─────────────────────────────────────────────────────────────────────
-    if allergen_lower in ["milch", "lactose", "laktose", "milk", "butter"]:
-        # Prüfe Pflanzenmilch
-        for pflanzenmilch in PFLANZENMILCH_BEGRIFFE:
-            if pflanzenmilch in synonym_lower or pflanzenmilch in fundstelle_lower:
-                return True  # False Positive!
-        
-        # Prüfe vegane/pflanzliche Butter
-        for vegane_butter in VEGANE_BUTTER_BEGRIFFE:
-            if vegane_butter in synonym_lower or vegane_butter in fundstelle_lower:
-                return True  # False Positive!
-    
-    # ─────────────────────────────────────────────────────────────────────
-    # FILTER 2: PSEUDO-GETREIDE (buchweizen, quinoa, amaranth)
-    # ─────────────────────────────────────────────────────────────────────
-    if allergen_lower in ["gluten", "weizen", "wheat"]:
-        for pseudo in GLUTENFREIE_PSEUDOGETREIDE:
-            if pseudo in synonym_lower or pseudo in fundstelle_lower:
-                return True  # False Positive!
-    
-    # ─────────────────────────────────────────────────────────────────────
-    # FILTER 3: PFLANZENPROTEIN (sojaeiweiß, erbsenprotein)
-    # ─────────────────────────────────────────────────────────────────────
-    if allergen_lower in ["ei", "egg", "eier"]:
-        for pflanzenprotein in PFLANZENPROTEIN_BEGRIFFE:
-            if pflanzenprotein in synonym_lower or pflanzenprotein in fundstelle_lower:
-                return True  # False Positive!
-    
-    # ─────────────────────────────────────────────────────────────────────
-    # FILTER 4: KONTEXT-ANALYSE (vegan, glutenfrei)
-    # ─────────────────────────────────────────────────────────────────────
-    # SMART: Wenn "vegane Sahne" → KEINE Milch!
-    #        Wenn "glutenfreies Brot" → KEIN Gluten!
-    if hat_veganen_oder_glutenfreien_kontext(fundstelle, allergen):
-        return True  # False Positive durch Kontext!
-    
-    return False  # Kein False Positive → echter Fund!
+logger = logging.getLogger(__name__)  
 
 
 def synonyme_fuer(allergen: str) -> list[str]:
     """
     Gibt die Liste der Synonyme für ein Allergen zurück.
-    Kombiniert statische Synonyme + dynamisch gelernte.
+    Kombiniert DB-Synonyme + dynamisch gelernte.
     """
     key = allergen.lower().strip()
     synonyme = []
     
-    # 1. Statische Synonyme aus allergen_data.py
+    # 1. Synonyme aus Datenbank (migriert von allergen_data.py)
+    ALLERGEN_SYNONYME = get_all_allergen_synonyms()
+    
     if key in ALLERGEN_SYNONYME:
         synonyme.extend(ALLERGEN_SYNONYME[key])
     else:
@@ -187,8 +34,10 @@ def synonyme_fuer(allergen: str) -> list[str]:
         from synonym_learner import hole_gelernte_synonyme
         learned = hole_gelernte_synonyme(allergen)
         synonyme.extend(learned)
-    except Exception:
-        pass  # DB nicht verfügbar, nur statische nutzen
+    except ImportError:
+        logger.debug("synonym_learner module not available, using only static synonyms")
+    except Exception as e:
+        logger.warning(f"Failed to load learned synonyms: {e}")
     
     return synonyme if synonyme else [key]
 
@@ -220,10 +69,10 @@ def synonym_matching(text: str, user_allergien: list[str]) -> list[dict]:
     
     # Wenn keine Zutaten gefunden, analysiere nichts
     if not zutaten_text:
-        print("[synonym_matcher] ⚠️  Keine Zutaten-Sektion gefunden → kein Matching")
+        logger.warning("[synonym_matcher] No ingredients section found, no matching")
         return []
     
-    print(f"[synonym_matcher] ✅ Zutaten-Text ({len(zutaten_text)} Zeichen): {zutaten_text[:100]}...")
+    logger.debug(f"[synonym_matcher] Ingredients text ({len(zutaten_text)} chars): {zutaten_text[:100]}...")
     
     funde = []
     text_lower = zutaten_text.lower()  # NUR Zutaten analysieren!
@@ -265,10 +114,10 @@ def synonym_matching(text: str, user_allergien: list[str]) -> list[dict]:
             zeile_end = len(zutaten_text) if zeile_end == -1 else zeile_end
             fundstelle_temp = zutaten_text[zeile_start:zeile_end].strip()
             
-            # SYSTEMATISCHER CHECK: Ist das ein False Positive?
+            # SYSTEMATIC CHECK: Is this a false positive?
             if ist_false_positive(allergie, synonym, fundstelle_temp):
-                print(f"   🧹 FALSE POSITIVE gefiltert: '{synonym}' in '{fundstelle_temp[:60]}...'")
-                continue  # Überspringe diesen Fund!
+                logger.debug(f"FALSE POSITIVE filtered: '{synonym}' in '{fundstelle_temp[:60]}...'")
+                continue  # Skip this finding!
             
             # FILTER: Überspringe Nährwerttabellen-Kontext (z.B. "Eiweiß 14 g")
             if synonym == "eiweiß":
@@ -302,7 +151,7 @@ def synonym_matching(text: str, user_allergien: list[str]) -> list[dict]:
                 "synonym":    synonym,
                 "fundstelle": fundstelle,
                 "ist_spur":   ist_spur,
-                "ersatz":     ersatz_fuer(synonym),
+                "ersatz":     get_replacement_for_term(synonym),
             })
         
         # Wähle den BESTEN Fund für dieses Allergen:

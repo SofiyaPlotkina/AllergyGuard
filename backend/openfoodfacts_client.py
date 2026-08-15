@@ -4,9 +4,13 @@ import datetime
 import json
 import re
 import requests
+import logging
 from typing import Optional
 
-from allergen_data import OFF_TAG_MAP, ersatz_fuer
+from allergen_data import OFF_TAG_MAP
+from allergen_db import get_replacement_for_term
+
+logger = logging.getLogger(__name__)
 from config import OFF_CACHE_TTL_DAYS
 from database import db
 
@@ -55,8 +59,14 @@ def suche_off(query: str) -> Optional[dict]:
                 result = data.get("product", {})
                 off_cache_schreiben(query, result)
                 return result
-        except Exception:
-            pass
+                
+        except requests.RequestException as e:
+            logger.warning(f"OpenFoodFacts API request failed for barcode {query}: {e}")
+        except json.JSONDecodeError as e:
+            logger.warning(f"Failed to parse OpenFoodFacts response: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error querying OpenFoodFacts: {e}")
+            
         return None
 
     # Textsuche
@@ -79,8 +89,14 @@ def suche_off(query: str) -> Optional[dict]:
             if p.get("allergens_tags") or p.get("ingredients_text"):
                 off_cache_schreiben(query, p)
                 return p
-    except Exception:
-        pass
+                
+    except requests.RequestException as e:
+        logger.warning(f"OpenFoodFacts search request failed for '{query}': {e}")
+    except json.JSONDecodeError as e:
+        logger.warning(f"Failed to parse OpenFoodFacts search response: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error in OpenFoodFacts search: {e}")
+        
     return None
 
 
@@ -103,7 +119,7 @@ def off_allergene_pruefen(produkt: dict, user_allergien: list[str]) -> list[dict
                     "synonym":    syn,
                     "fundstelle": f"OpenFoodFacts: {produkt_name}",
                     "ist_spur":   False,
-                    "ersatz":     ersatz_fuer(syn),
+                    "ersatz":     get_replacement_for_term(syn),
                 })
                 break
             if tag in spuren_tags:
@@ -113,7 +129,7 @@ def off_allergene_pruefen(produkt: dict, user_allergien: list[str]) -> list[dict
                     "synonym":    syn,
                     "fundstelle": f"OpenFoodFacts (Spur): {produkt_name}",
                     "ist_spur":   True,
-                    "ersatz":     ersatz_fuer(syn),
+                    "ersatz":     get_replacement_for_term(syn),
                 })
                 break
     return funde

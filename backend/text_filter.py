@@ -1,6 +1,9 @@
 """Text filtering to extract only ingredient sections from product descriptions."""
 
 import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def extrahiere_zutaten_sektion(text: str) -> str:
@@ -116,17 +119,17 @@ def extrahiere_zutaten_sektion(text: str) -> str:
     # FALLBACK: Wenn nichts gefunden, aber Text kurz → ganzen Text nehmen
     # ══════════════════════════════════════════════════════════════════════
     if not relevante_abschnitte:
-        # Wenn Text sehr kurz (<400 Zeichen), könnte es NUR Zutaten sein
+        # If text is very short (<400 chars), might be ONLY ingredients
         if len(text) < 400:
-            print(f"[text_filter] ⚠️  Keine Marker, aber Text kurz ({len(text)} Zeichen) → analysiere alles")
+            logger.warning(f"[text_filter] No markers, but text short ({len(text)} chars) - analyze all")
             return text
         
-        # Langer Text ohne Marker → wahrscheinlich kein Produkttext
-        print(f"[text_filter] ⚠️  Keine relevanten Sektionen gefunden → analysiere NICHTS")
+        # Long text without markers - probably not product text
+        logger.warning("[text_filter] No relevant sections found - analyze NOTHING")
         return ""
     
-    # Kombiniere alle relevanten Abschnitte
+    # Combine all relevant sections
     kombiniert = "\n\n".join(relevante_abschnitte)
-    print(f"[text_filter] ✅ {len(relevante_abschnitte)} Sektionen extrahiert ({len(kombiniert)} Zeichen)")
+    logger.info(f"[text_filter] {len(relevante_abschnitte)} sections extracted ({len(kombiniert)} chars)")
     
     return kombiniert
