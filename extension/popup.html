@@ -5,7 +5,13 @@
     <title>AllergyGuard</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { width: 340px; font-family: -apple-system, sans-serif; background: #f5f5f5; color: #222; }
+        body { 
+            width: 340px; 
+            max-height: 600px;
+            overflow-y: auto;
+            font-family: -apple-system, sans-serif; 
+            background: #f5f5f5; 
+            color: #222; }
 
         .header {
             background: #2c7a2c;
@@ -145,6 +151,8 @@
             border-left: 3px solid #2c7a2c;
             padding: 5px 8px;
             border-radius: 4px;
+            max-height: 80px; 
+            overflow-y: auto;
         }
         .ersatz-box strong { display: block; margin-bottom: 2px; color: #1b5e20; }
 
