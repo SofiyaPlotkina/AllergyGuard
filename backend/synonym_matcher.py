@@ -156,6 +156,7 @@ def synonym_matching(text: str, user_allergien: list[str]) -> list[dict]:
         
         # Sortiert "direkte" Funde vs Spuren, danach bei Synonymen nach Länge (z.B. Magermilch = spezifischer als Milch)
         if allergen_funde:
+            # Deduplizierung: Gleiche Fundstelle → längeres Synonym gewinnt
             dedupliziert = {}
             for fund in allergen_funde:
                 key = fund["fundstelle"][:50] 
@@ -163,10 +164,14 @@ def synonym_matching(text: str, user_allergien: list[str]) -> list[dict]:
                 if key not in dedupliziert or len(fund["synonym"]) > len(dedupliziert[key]["synonym"]):
                     dedupliziert[key] = fund
     
-            beste_funde = list(dedupliziert.values())
-            beste_funde.sort(key=lambda f: (f["ist_spur"], -len(f["synonym"])))
+            alle_funde_list = list(dedupliziert.values())
+            alle_funde_list.sort(key=lambda f: (f["ist_spur"], -len(f["synonym"])))
     
-            funde.append(beste_funde[0])
+            # NEU: Füge ALLE Funde hinzu (nicht nur besten!)
+            # So kann Frontend gruppiert anzeigen: [Milch] mascarpone, sahne, magerquark
+            for fund in alle_funde_list:
+                funde.append(fund)
+            
             gefundene_allergene.add(allergie)
     
     return funde
