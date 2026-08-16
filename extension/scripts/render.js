@@ -1,7 +1,16 @@
 (function () {
+    // Prüfe ob Alternativen angezeigt werden sollen
+    function shouldShowAlternatives() {
+        const toggle = document.getElementById('showAlternativesToggle');
+        return toggle ? toggle.checked : true; // Default: anzeigen
+    }
+
     function renderFundItem(fund, istSpur) {
         const termClass = istSpur ? 'found-term warn' : 'found-term';
-        const ersatz = Array.isArray(fund.ersatz) && fund.ersatz.length
+        
+        // Alternativen nur anzeigen wenn Toggle aktiviert
+        const showAlternatives = shouldShowAlternatives();
+        const ersatz = showAlternatives && Array.isArray(fund.ersatz) && fund.ersatz.length
             ? `<div class="ersatz-box">
                    <strong>💡 Alternativen:</strong>
                    ${fund.ersatz.map(eintrag => `• ${eintrag}`).join('<br>')}

@@ -31,6 +31,57 @@
             cursor: pointer;
         }
 
+        /* Toggle für Alternativvorschläge */
+        .alternatives-toggle {
+            background: white;
+            padding: 8px 15px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 12px;
+        }
+        .alternatives-toggle-label {
+            color: #444;
+            font-weight: 500;
+        }
+        .toggle-switch {
+            position: relative;
+            width: 42px;
+            height: 22px;
+            cursor: pointer;
+        }
+        .toggle-switch input {
+            display: none;
+        }
+        .toggle-slider {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #ccc;
+            border-radius: 22px;
+            transition: background 0.3s;
+        }
+        .toggle-slider:before {
+            content: '';
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            left: 2px;
+            bottom: 2px;
+            background: white;
+            border-radius: 50%;
+            transition: transform 0.3s;
+        }
+        .toggle-switch input:checked + .toggle-slider {
+            background: #2c7a2c;
+        }
+        .toggle-switch input:checked + .toggle-slider:before {
+            transform: translateX(20px);
+        }
+
         .tabs {
             display: flex;
             background: white;
@@ -337,7 +388,14 @@
         <h1>AllergyGuard</h1>
         <span class="profile-badge" id="profileBadge">Lade...</span>
     </div>
-
+    <!-- Toggle für Alternativvorschläge -->
+    <div class="alternatives-toggle">
+        <span class="alternatives-toggle-label">💡 Alternativvorschläge anzeigen</span>
+        <label class="toggle-switch">
+            <input type="checkbox" id="showAlternativesToggle" checked>
+            <span class="toggle-slider"></span>
+        </label>
+    </div>
     <div class="tabs">
         <div class="tab active" data-tab="scan">🔍 Scan</div>
         <div class="tab" data-tab="eingabe">✏️ Eingabe</div>
