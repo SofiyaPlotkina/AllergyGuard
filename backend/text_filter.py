@@ -116,16 +116,20 @@ def extrahiere_zutaten_sektion(text: str) -> str:
             pos += 1
     
     # ══════════════════════════════════════════════════════════════════════
-    # FALLBACK: Wenn nichts gefunden, aber Text kurz → ganzen Text nehmen
+    # FALLBACK: Wenn nichts gefunden → IM ZWEIFEL ALLES ANALYSIEREN!
     # ══════════════════════════════════════════════════════════════════════
     if not relevante_abschnitte:
-        # If text is very short (<400 chars), might be ONLY ingredients
-        if len(text) < 400:
-            logger.warning(f"[text_filter] No markers, but text short ({len(text)} chars) - analyze all")
+        # Prüfe auf Rezept-Muster: Mengenangaben wie "200 g", "4 Eier", etc.
+        hat_mengenangaben = bool(re.search(r'\d+\s*(g|ml|tl|el|prise|stück|eier?)\b', text_lower))
+        
+        # KRITISCH FÜR ALLERGIKER: Im Zweifel ALLES analysieren statt NICHTS!
+        # Lieber False-Positive als False-Negative (lebensbedrohlich!)
+        if len(text) < 3000 or hat_mengenangaben:
+            logger.warning(f"[text_filter] No markers, analyzing full text ({len(text)} chars, recipe pattern: {hat_mengenangaben})")
             return text
         
-        # Long text without markers - probably not product text
-        logger.warning("[text_filter] No relevant sections found - analyze NOTHING")
+        # Nur bei SEHR langen Texten (>3000 chars) ohne jegliche Marker: wahrscheinlich kein Produkt/Rezept
+        logger.warning("[text_filter] Very long text without markers - analyze NOTHING")
         return ""
     
     # Combine all relevant sections
