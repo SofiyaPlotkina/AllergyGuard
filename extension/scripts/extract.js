@@ -18,7 +18,7 @@
         }
         
         // DEBUG-MARKER (wird im Backend sichtbar sein)
-        console.log('[AllergyGuard] ✅ NEUE extract.js VERSION v2.0 läuft!');
+        console.log('[AllergyGuard] NEUE extract.js VERSION v2.0 läuft!');
         
         function normalizeText(value) {
             return (value || '')
@@ -263,7 +263,7 @@
         for (const stage of extractionStages) {
             const text = stage();
             if (text.length > 30) {
-                console.log(`[AllergyGuard] ✅ Stage ${stage.name} → ${text.length} Zeichen`);
+                console.log(`[AllergyGuard] Stage ${stage.name} → ${text.length} Zeichen`);
                 return text;
             }
         }

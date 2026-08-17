@@ -12,7 +12,7 @@
         const showAlternatives = shouldShowAlternatives();
         const ersatz = showAlternatives && Array.isArray(fund.ersatz) && fund.ersatz.length
             ? `<div class="ersatz-box">
-                   <strong>💡 Alternativen:</strong>
+                   <strong>Alternativen:</strong>
                    ${fund.ersatz.map(eintrag => `• ${eintrag}`).join('<br>')}
                </div>`
             : '';
@@ -44,7 +44,6 @@
         const urteil = (data.urteil || '').toUpperCase();
 
         const bannerClass = urteil === 'GEFAHR' ? 'gefahr' : urteil === 'WARNUNG' ? 'warnung' : 'sicher';
-        const bannerIcon = urteil === 'GEFAHR' ? '🚫' : urteil === 'WARNUNG' ? '⚠️' : '✅';
         const bannerText = urteil === 'GEFAHR'
             ? 'NICHT SICHER – Allergen gefunden!'
             : urteil === 'WARNUNG'
@@ -57,11 +56,11 @@
         `;
 
         const methodeLabel = {
-            openfoodfacts: '🗄️ OpenFoodFacts',
-            ollama: '🤖 KI (Ollama)',
-            synonym: '🔤 Textanalyse',
-            'synonym+ki': '🔤🤖 Textanalyse + KI',
-            ki: '🤖 KI (Ollama)',
+            openfoodfacts: 'OpenFoodFacts',
+            ollama: 'KI (Ollama)',
+            synonym: 'Textanalyse',
+            'synonym+ki': 'Textanalyse + KI',
+            ki: 'KI (Ollama)',
         }[data.methode] || data.methode;
         bodyHTML += `<div style="margin-bottom:10px;">
             <span style="display:inline-block;background:#f0f0f0;color:#555;font-size:11px;padding:3px 8px;border-radius:10px;font-weight:500;">
@@ -112,7 +111,7 @@
 
         container.innerHTML = `
             <div class="result-card">
-                <div class="result-banner ${bannerClass}">${bannerIcon} ${bannerText}</div>
+                <div class="result-banner ${bannerClass}">${bannerText}</div>
                 <div class="result-body">${bodyHTML}</div>
             </div>
         `;

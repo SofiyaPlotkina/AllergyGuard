@@ -11,7 +11,7 @@
         let html = '<div style="padding:8px;font-size:12px;">';
         
         if (gefahrFunde.length) {
-            html += '<div style="margin-bottom:6px;"><strong style="color:#c0392b;">⚠️ Direkt gefunden:</strong></div>';
+            html += '<div style="margin-bottom:6px;"><strong style="color:#c0392b;">Direkt gefunden:</strong></div>';
             gefahrFunde.forEach(fund => {
                 html += `<div style="margin-left:12px;margin-bottom:4px;">
                     <span style="background:#ffe5e5;padding:2px 4px;border-radius:3px;font-weight:500;">${fund.synonym}</span>
@@ -24,7 +24,7 @@
         }
         
         if (spurenFunde.length) {
-            html += '<div style="margin-bottom:6px;margin-top:8px;"><strong style="color:#e67e22;">ℹ️ Spurenhinweise:</strong></div>';
+            html += '<div style="margin-bottom:6px;margin-top:8px;"><strong style="color:#e67e22;">Spurenhinweise:</strong></div>';
             spurenFunde.forEach(fund => {
                 html += `<div style="margin-left:12px;margin-bottom:4px;">
                     <span style="background:#fff3cd;padding:2px 4px;border-radius:3px;">${fund.synonym}</span>
@@ -51,7 +51,6 @@
             list.innerHTML = '<div class="history-list">' +
                 items.map((item, idx) => {
                     const cls = (item.urteil || '').toLowerCase();
-                    const icon = cls === 'gefahr' ? '🚫' : cls === 'warnung' ? '⚠️' : '✅';
                     const site = item.source || 'Unbekannt';
                     const date = new Date(item.timestamp).toLocaleString('de-DE', {
                         dateStyle: 'short',
@@ -59,11 +58,11 @@
                     });
 
                     const methodeLabel = {
-                        openfoodfacts: '🗄️ OpenFoodFacts',
-                        ollama: '🤖 KI',
-                        synonym: '🔤 Textanalyse',
-                        'synonym+ki': '🔤🤖 Text + KI',
-                        ki: '🤖 KI',
+                        openfoodfacts: 'OpenFoodFacts',
+                        ollama: 'KI',
+                        synonym: 'Textanalyse',
+                        'synonym+ki': 'Text + KI',
+                        ki: 'KI',
                     }[item.methode] || item.methode || '';
 
                     // Parse result_snapshot wenn vorhanden
@@ -83,7 +82,7 @@
                         <div>
                             <span class="history-dot ${cls}"></span>
                             <div class="history-info">
-                                <div class="history-site">${icon} ${site}</div>
+                                <div class="history-site">${site}</div>
                                 <div class="history-date">${date} · ${item.allergie_geprueft}${methodeLabel ? ' · ' + methodeLabel : ''}</div>
                                 ${hasDetails ? '<div class="history-expand-hint" style="font-size:10px;color:#999;margin-top:2px;">▸ Details anzeigen</div>' : ''}
                             </div>
