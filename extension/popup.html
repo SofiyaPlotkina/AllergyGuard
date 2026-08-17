@@ -290,6 +290,55 @@
         }
         .history-empty { color: #999; font-size: 13px; text-align: center; padding: 20px 0; }
 
+        /* Profil-Liste (mehrere Nutzer) */
+        .profile-list-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        .profile-list-header span { font-size: 13px; font-weight: 600; color: #444; }
+        .btn-add-user {
+            padding: 5px 10px;
+            background: #2c7a2c;
+            color: white;
+            border: none;
+            border-radius: 14px;
+            font-size: 12px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .btn-add-user:hover { background: #256325; }
+
+        .user-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+        .user-row {
+            display: flex; align-items: center; gap: 8px;
+            background: white;
+            border-radius: 6px;
+            padding: 8px 10px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        .user-row input[type=checkbox] { accent-color: #2c7a2c; width: 15px; height: 15px; cursor: pointer; flex-shrink: 0; }
+        .user-info { flex: 1; min-width: 0; }
+        .user-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .user-allergy { font-size: 11px; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .user-icon-btn {
+            background: none; border: none; cursor: pointer;
+            font-size: 14px; padding: 3px 5px; border-radius: 4px;
+            flex-shrink: 0;
+        }
+        .user-icon-btn:hover { background: #eee; }
+
+        .btn-cancel {
+            padding: 10px 14px;
+            background: #eee;
+            color: #444;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .btn-cancel:hover { background: #ddd; }
+
         /* Profil */
         .profile-form label { display: block; font-size: 12px; font-weight: 600; color: #444; margin-bottom: 4px; margin-top: 10px; }
         .profile-form input {
@@ -365,8 +414,7 @@
         .allergen-row.hidden { display: none; }
 
         .btn-save {
-            width: 100%;
-            margin-top: 14px;
+            flex: 1;
             padding: 10px;
             background: #2c7a2c;
             color: white;
@@ -425,8 +473,15 @@
 
     <!-- Profil -->
     <div class="panel" id="tab-profil">
-        <div class="profile-form">
-            <label>Dein Name</label>
+        <div class="profile-list-header">
+            <span>Profile</span>
+            <button class="btn-add-user" id="addUserButton">+ Neu</button>
+        </div>
+        <div class="user-list" id="userList"></div>
+
+        <div class="profile-form" id="profileForm" style="display:none;">
+            <label id="profileFormTitle">Neues Profil</label>
+            <label>Name</label>
             <input type="text" id="profileName" placeholder="z.B. Max">
 
             <div class="allergen-label-row">
@@ -449,9 +504,13 @@
             <!-- Freitext-Feld (wird automatisch befüllt, kann manuell ergänzt werden) -->
             <label style="margin-top:10px;">Ausgewählt / eigene Eingabe</label>
             <input type="text" id="profileAllergy" placeholder="z.B. Erdnuss, Milch, Gluten">
+
+            <div style="display:flex; gap:8px; margin-top:14px;">
+                <button class="btn-save" id="saveProfileButton">💾 Speichern</button>
+                <button class="btn-cancel" id="cancelProfileButton">Abbrechen</button>
+            </div>
+            <p class="save-msg" id="saveMsg"></p>
         </div>
-        <button class="btn-save" id="saveProfileButton">💾 Profil speichern</button>
-        <p class="save-msg" id="saveMsg"></p>
     </div>
 
     <script src="scripts/namespace.js"></script>

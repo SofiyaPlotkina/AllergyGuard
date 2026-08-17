@@ -16,29 +16,32 @@
         { key: 'Sulfite', emoji: '🍷', sub: 'E220–E228, Schwefeldioxid', top: false },
     ];
 
-    function getSelected() {
+    // null = Formular legt ein neues Profil an; sonst id des bearbeiteten Profils
+    let editingUserId = null;
+
+    function getSelectedAllergens() {
         return document.getElementById('profileAllergy').value
             .split(',').map(value => value.trim()).filter(Boolean);
     }
 
-    function setSelected(list) {
+    function setSelectedAllergens(list) {
         document.getElementById('profileAllergy').value = list.join(', ');
         syncPickerUI();
     }
 
     function toggleAllergen(key) {
-        const current = getSelected();
+        const current = getSelectedAllergens();
         const index = current.findIndex(value => value.toLowerCase() === key.toLowerCase());
         if (index >= 0) {
             current.splice(index, 1);
         } else {
             current.push(key);
         }
-        setSelected(current);
+        setSelectedAllergens(current);
     }
 
     function syncPickerUI() {
-        const selected = getSelected().map(value => value.toLowerCase());
+        const selected = getSelectedAllergens().map(value => value.toLowerCase());
         document.querySelectorAll('.top-btn').forEach(button => {
             button.classList.toggle('selected', selected.includes(button.dataset.key.toLowerCase()));
         });
@@ -109,23 +112,82 @@
         syncPickerUI();
     }
 
-    async function loadProfileBadge() {
+    function showForm(user) {
+        editingUserId = user ? user.id : null;
+        document.getElementById('profileFormTitle').textContent = user ? 'Profil bearbeiten' : 'Neues Profil';
+        document.getElementById('profileName').value = user ? user.name : '';
+        setSelectedAllergens(user ? user.allergy.split(',').map(value => value.trim()).filter(Boolean) : []);
+        document.getElementById('saveMsg').textContent = '';
+        document.getElementById('profileForm').style.display = 'block';
+        document.getElementById('profileName').focus();
+    }
+
+    function hideForm() {
+        document.getElementById('profileForm').style.display = 'none';
+        editingUserId = null;
+    }
+
+    function renderUserList(users) {
+        const wrap = document.getElementById('userList');
+        if (!users.length) {
+            wrap.innerHTML = '<p class="history-empty">Noch keine Profile angelegt.</p>';
+            return;
+        }
+
+        wrap.innerHTML = '';
+        users.forEach(user => {
+            const row = document.createElement('div');
+            row.className = 'user-row';
+            row.innerHTML = `
+                <input type="checkbox" class="user-select" ${user.selected ? 'checked' : ''} title="Für Prüfung berücksichtigen">
+                <div class="user-info">
+                    <div class="user-name">${user.name}</div>
+                    <div class="user-allergy">${user.allergy}</div>
+                </div>
+                <button class="user-icon-btn user-edit" title="Bearbeiten">✏️</button>
+                <button class="user-icon-btn user-delete" title="Löschen">🗑️</button>
+            `;
+            row.querySelector('.user-select').addEventListener('change', async event => {
+                await window.AllergyGuard.api.setUserSelected(user.id, event.target.checked);
+                loadProfileBadge();
+            });
+            row.querySelector('.user-edit').addEventListener('click', () => showForm(user));
+            row.querySelector('.user-delete').addEventListener('click', async () => {
+                if (!confirm(`Profil "${user.name}" wirklich löschen?`)) return;
+                await window.AllergyGuard.api.deleteUser(user.id);
+                if (editingUserId === user.id) hideForm();
+                await loadUserList();
+                loadProfileBadge();
+            });
+            wrap.appendChild(row);
+        });
+    }
+
+    async function loadUserList() {
         try {
-            const profile = await window.AllergyGuard.api.getProfile();
-            document.getElementById('profileBadge').textContent =
-                profile.name ? `${profile.name} · ${profile.allergy}` : 'Kein Profil';
+            const users = await window.AllergyGuard.api.getUsers();
+            renderUserList(users);
         } catch {
-            document.getElementById('profileBadge').textContent = 'Offline';
+            document.getElementById('userList').innerHTML =
+                '<p class="history-empty" style="color:#c0392b;">Profile konnten nicht geladen werden.</p>';
         }
     }
 
-    async function loadProfileForm() {
+    async function loadProfileBadge() {
+        const badge = document.getElementById('profileBadge');
         try {
-            const profile = await window.AllergyGuard.api.getProfile();
-            document.getElementById('profileName').value = profile.name || '';
-            document.getElementById('profileAllergy').value = profile.allergy || '';
-            syncPickerUI();
-        } catch {}
+            const users = await window.AllergyGuard.api.getUsers();
+            const selected = users.filter(user => user.selected);
+            if (!selected.length) {
+                badge.textContent = 'Kein Profil';
+            } else if (selected.length === 1) {
+                badge.textContent = `${selected[0].name} · ${selected[0].allergy}`;
+            } else {
+                badge.textContent = selected.map(user => user.name).join(' + ');
+            }
+        } catch {
+            badge.textContent = 'Offline';
+        }
     }
 
     async function saveProfileForm() {
@@ -140,13 +202,14 @@
         }
 
         try {
-            await window.AllergyGuard.api.saveProfile(name, allergy);
-            msg.style.color = '#2c7a2c';
-            msg.textContent = '✅ Gespeichert!';
+            if (editingUserId) {
+                await window.AllergyGuard.api.updateUser(editingUserId, name, allergy);
+            } else {
+                await window.AllergyGuard.api.createUser(name, allergy);
+            }
+            hideForm();
+            await loadUserList();
             loadProfileBadge();
-            setTimeout(() => {
-                msg.textContent = '';
-            }, 2500);
         } catch {
             msg.style.color = '#c0392b';
             msg.textContent = 'Fehler beim Speichern.';
@@ -156,11 +219,13 @@
     function initProfile() {
         buildPicker();
         loadProfileBadge();
+        document.getElementById('addUserButton').addEventListener('click', () => showForm(null));
+        document.getElementById('cancelProfileButton').addEventListener('click', hideForm);
     }
 
     window.AllergyGuard.profile = {
         initProfile,
-        loadProfileForm,
+        loadProfileForm: loadUserList,
         saveProfileForm,
     };
 })();
