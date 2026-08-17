@@ -59,6 +59,7 @@
             openfoodfacts: 'OpenFoodFacts',
             ollama: 'KI (Ollama)',
             synonym: 'Textanalyse',
+            'openfoodfacts+synonym': 'OpenFoodFacts + Textanalyse',
             'synonym+ki': 'Textanalyse + KI',
             ki: 'KI (Ollama)',
         }[data.methode] || data.methode;

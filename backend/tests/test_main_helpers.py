@@ -1,19 +1,11 @@
-import os
-
 import pytest
 
 
 @pytest.fixture(scope="module")
-def extrahiere_produktnamen(tmp_path_factory):
-    """Importiert main.extrahiere_produktnamen, ohne dass main.py beim Import
-    (init_db(), FastAPI-App) die echte Entwickler-Datenbank berührt."""
-    tmp_dir = tmp_path_factory.mktemp("main_import")
-    original_cwd = os.getcwd()
-    os.chdir(tmp_dir)
-    try:
-        from main import extrahiere_produktnamen as fn
-    finally:
-        os.chdir(original_cwd)
+def extrahiere_produktnamen():
+    """extrahiere_produktnamen lebt in openfoodfacts_client.py (Kandidatenextraktion
+    fuer die Freitext-Produkterkennung), nicht mehr in main.py."""
+    from openfoodfacts_client import extrahiere_produktnamen as fn
     return fn
 
 

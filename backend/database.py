@@ -84,6 +84,25 @@ def init_db():
         )
     ''')
 
+    # Lokal bekannte OFF-Produkte (wächst durch Barcode-Scans & verifizierte
+    # Textsuchen, statt bei jedem Scan die OFF-Volltextsuche blind zu befragen)
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS off_products (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            barcode TEXT NOT NULL UNIQUE,
+            produktname TEXT NOT NULL,
+            produktname_normalisiert TEXT NOT NULL,
+            allergens_tags TEXT NOT NULL,
+            traces_tags TEXT NOT NULL,
+            quelle TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    conn.execute('''
+        CREATE INDEX IF NOT EXISTS idx_off_products_name
+        ON off_products(produktname_normalisiert)
+    ''')
+
     cols = [r[1] for r in conn.execute("PRAGMA table_info(history)").fetchall()]
     if "methode" not in cols:
         conn.execute("ALTER TABLE history ADD COLUMN methode TEXT")

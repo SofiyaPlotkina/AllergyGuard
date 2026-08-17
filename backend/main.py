@@ -10,7 +10,7 @@ from database import db, init_db
 from models import UserProfile, SelectionUpdate, RecipeRequest
 from allergen_db import get_replacement_for_term, load_synonyms_into_cache
 from synonym_matcher import synonyme_fuer, synonym_matching
-from openfoodfacts_client import suche_off, off_allergene_pruefen
+from openfoodfacts_client import suche_off, off_allergene_pruefen, off_produkt_im_text_finden
 from ollama_client import analyse_mit_ollama
 from synonym_learner import lerne_synonym, lerne_von_ollama_funden, lerne_von_off_ingredients
 # from filters import filtere_funde  # Nicht mehr benötigt - Filter in ollama_client.py
@@ -35,61 +35,6 @@ app.add_middleware(
 
 init_db()
 load_synonyms_into_cache()  # Load allergen synonyms from DB into memory
-
-
-# ── Hilfsfunktionen ───────────────────────────────────────────────────────────
-def extrahiere_produktnamen(text: str) -> list[str]:
-    """Versucht Produktnamen oder Barcodes aus dem Freitext zu extrahieren."""
-    kandidaten = []
-    gesehen = set()
-    
-    # Ignoriere generische Überschriften
-    IGNORIERTE_ZEILEN = {
-        "produktbeschreibung", "zutaten", "allergene", "nährwerte", 
-        "inhaltsstoffe", "ingredients", "allergens", "nutrition",
-        "beschreibung", "details", "information"
-    }
-
-    # GTIN/EAN explizit suchen (oft in "GTIN: 1234567890")
-    gtin_match = re.search(r'(?:GTIN|EAN|Barcode)[:\s]+(\d{8,13})', text, re.IGNORECASE)
-    if gtin_match:
-        barcode = gtin_match.group(1)
-        kandidaten.append(barcode)
-        gesehen.add(barcode.lower())
-
-    # Alle Barcodes (EAN-8, EAN-13) sammeln
-    for barcode in re.findall(r'\b\d{8,13}\b', text):
-        if barcode.lower() not in gesehen:
-            kandidaten.append(barcode)
-            gesehen.add(barcode.lower())
-
-    # Produktname aus den ersten Zeilen extrahieren (skip generische Überschriften)
-    for zeile in text.splitlines()[:10]:  # Erste 10 Zeilen durchsuchen
-        zeile_clean = zeile.strip()
-        zeile_lower = zeile_clean.lower()
-        
-        # Skip zu kurze/lange oder generische Zeilen
-        if not (15 < len(zeile_clean) < 100):  # Mindestens 15 Zeichen für echte Produktnamen
-            continue
-        if zeile_lower in IGNORIERTE_ZEILEN:
-            continue
-        if any(ig in zeile_lower for ig in IGNORIERTE_ZEILEN):
-            continue
-        
-        # Skip Marketing-Floskeln
-        if any(floskeln in zeile_lower for floskeln in ["hoher", "niedriger", "reich an", "ohne", "mit extra"]):
-            continue
-        
-        # Guter Kandidat: Zeile mit Produkt-typischen Wörtern + Marke/Geschmack
-        if any(keyword in zeile_lower for keyword in ["riegel", "protein", "schokolade", "müsli", "joghurt", "drink", "snack", "kekse", "chips"]):
-            # Muss auch Marke/Geschmack enthalten (nicht nur "Proteinriegel")
-            if any(detail in zeile_lower for detail in ["caramel", "vanille", "schoko", "nuss", "beere", "frucht", "geschmack", "%", "sportness", "dm"]):
-                if zeile_lower not in gesehen:
-                    kandidaten.append(zeile_clean)
-                    gesehen.add(zeile_lower)
-                    break
-
-    return kandidaten[:5]  # max 5 Versuche
 
 
 # ── Endpunkte ─────────────────────────────────────────────────────────────────
@@ -311,14 +256,16 @@ def check_recipe(request: RecipeRequest):
     logger.debug("="*80)
 
     funde: list[dict] = []
-    methode = "synonym"
+    methode_teile: list[str] = []
 
-    # SMART CASCADE: Fast to Slow, Local to Remote, Learning at each step
+    # SMART CASCADE: Tier 1 und Tier 2 ergänzen sich (ein erkanntes OFF-Produkt
+    # deckt nicht automatisch alle anderen im Text genannten Zutaten ab), nur
+    # Tier 3 (KI) ist ein echter Fallback für den Fall, dass beide nichts finden.
 
     # TIER 1: OpenFoodFacts (external, cached, Synonym-Learning)
     logger.info("[TIER 1] OpenFoodFacts")
     produkt = None
-    
+
     # 1a) Barcode-Suche
     barcodes = re.findall(r'\b\d{8,13}\b', text)
     for barcode in barcodes:
@@ -327,62 +274,58 @@ def check_recipe(request: RecipeRequest):
             logger.info(f"Product via Barcode: {produkt.get('product_name', 'Unknown')}")
             break
         produkt = None
-    
-    # 1b) Produktnamen-Suche
+
+    # 1b) Produkt im Freitext erkennen: erst lokal bekannte Produkte (kein Netzwerk,
+    # kein Rateproblem), erst danach eine verifizierte OFF-Suche als Fallback
     if not produkt:
-        kandidaten = extrahiere_produktnamen(text)
-        for kandidat in kandidaten:
-            produkt = suche_off(kandidat)
-            if produkt and (produkt.get("allergens_tags") or produkt.get("ingredients_text")):
-                logger.info(f"Product via Name: {produkt.get('product_name')} ('{kandidat}')")
-                break
-            produkt = None
-    
+        produkt = off_produkt_im_text_finden(text)
+        if produkt:
+            logger.info(f"Product via Textmatch: {produkt.get('product_name')}")
+
     # 1c) Allergene in OFF prüfen + Synonyme lernen
     if produkt:
         off_funde = off_allergene_pruefen(produkt, allergien)
         if off_funde:
-            funde = off_funde
-            methode = "openfoodfacts"
+            funde.extend(off_funde)
+            methode_teile.append("openfoodfacts")
             logger.info(f"{len(off_funde)} allergens found in OFF!")
-            
+
             # Lerne aus OFF ingredients_text
             for allergie in allergien:
                 lerne_von_off_ingredients(produkt, allergie)
         else:
             logger.warning("Product found, but no allergens in OFF-DB")
 
-    # TIER 2: Local Synonym-DB (instant <100ms, static + learned)
-    if methode != "openfoodfacts":
-        logger.info("[TIER 2] Local Synonym-Matching (PRIMARY METHOD)")
-        synonym_funde = synonym_matching(text, allergien)
-        
-        if synonym_funde:
-            logger.info(f"{len(synonym_funde)} allergens found via synonym matching!")
-            funde = synonym_funde
-            methode = "synonym"
-        else:
-            logger.info("No allergens found via synonym matching")
-            
-            # TIER 3: Ollama AI (slow ~2-3s, ONLY as last fallback)
-            logger.info("[TIER 3] AI-Analysis (Ollama) as LAST RESORT FALLBACK")
-            try:
-                ollama_funde = analyse_mit_ollama(text, allergien)
-                
-                if ollama_funde:
-                    logger.info(f"AI finds {len(ollama_funde)} allergens")
-                    funde = ollama_funde
-                    methode = "ki"
-                else:
-                    logger.info("AI also finds nothing - product is safe")
-                    funde = []
-                    methode = "synonym"  # Synonym-Matching war primär
-                    
-            except Exception as e:
-                logger.warning(f"AI analysis failed: {e}")
-                funde = []
-                methode = "synonym"
+    # TIER 2: Local Synonym-DB (instant <100ms, static + learned) - läuft immer
+    # über den GESAMTEN Text, unabhängig davon ob Tier 1 schon etwas gefunden hat.
+    # Sonst würde z.B. "Weizenmehl" neben einem erkannten OFF-Produkt ignoriert.
+    logger.info("[TIER 2] Local Synonym-Matching")
+    synonym_funde = synonym_matching(text, allergien)
 
+    if synonym_funde:
+        logger.info(f"{len(synonym_funde)} allergens found via synonym matching!")
+        funde.extend(synonym_funde)
+        methode_teile.append("synonym")
+    else:
+        logger.info("No allergens found via synonym matching")
+
+    # TIER 3: Ollama AI (slow ~2-3s) - nur wenn WEDER OFF noch Synonym-Matching
+    # irgendetwas gefunden haben (echter Last-Resort-Fallback)
+    if not funde:
+        logger.info("[TIER 3] AI-Analysis (Ollama) as LAST RESORT FALLBACK")
+        try:
+            ollama_funde = analyse_mit_ollama(text, allergien)
+
+            if ollama_funde:
+                logger.info(f"AI finds {len(ollama_funde)} allergens")
+                funde = ollama_funde
+                methode_teile = ["ki"]
+            else:
+                logger.info("AI also finds nothing - product is safe")
+        except Exception as e:
+            logger.warning(f"AI analysis failed: {e}")
+
+    methode = "+".join(dict.fromkeys(methode_teile)) if methode_teile else "synonym"
     logger.info(f"FINAL METHOD: {methode.upper()}")
 
     # ── Gesamturteil ──────────────────────────────────────────────────────────
@@ -401,10 +344,10 @@ def check_recipe(request: RecipeRequest):
     gefunden_in        = erster_fund["fundstelle"] if erster_fund else ""
 
     if urteil == "GEFAHR":
-        allergien_liste = ", ".join(f["allergie"] for f in gefahr_funde)
+        allergien_liste = ", ".join(dict.fromkeys(f["allergie"] for f in gefahr_funde))
         grund = f'Direkt gefunden: {allergien_liste}. (via {methode})'
     elif urteil == "WARNUNG":
-        allergien_liste = ", ".join(f["allergie"] for f in spuren_funde)
+        allergien_liste = ", ".join(dict.fromkeys(f["allergie"] for f in spuren_funde))
         grund = f'Spurenhinweise auf: {allergien_liste}. (via {methode})'
     else:
         grund = f'Keine Allergene gefunden. (via {methode})'
