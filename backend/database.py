@@ -14,7 +14,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY,
             name TEXT NOT NULL,
-            allergy TEXT NOT NULL
+            allergy TEXT NOT NULL,
+            selected INTEGER NOT NULL DEFAULT 0
         )
     ''')
     conn.execute('''
@@ -89,7 +90,15 @@ def init_db():
     if "result_snapshot" not in cols:
         conn.execute("ALTER TABLE history ADD COLUMN result_snapshot TEXT")
 
+    user_cols = [r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()]
+    if "selected" not in user_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN selected INTEGER NOT NULL DEFAULT 0")
+
     if not conn.execute('SELECT 1 FROM users LIMIT 1').fetchone():
-        conn.execute("INSERT INTO users (name, allergy) VALUES ('Demo', 'Erdnuss')")
+        conn.execute("INSERT INTO users (name, allergy, selected) VALUES ('Demo', 'Erdnuss', 1)")
+    elif not conn.execute('SELECT 1 FROM users WHERE selected=1').fetchone():
+        # Migrating an older single-profile DB: keep existing behavior by selecting the first user
+        first_id = conn.execute('SELECT id FROM users ORDER BY id LIMIT 1').fetchone()["id"]
+        conn.execute('UPDATE users SET selected=1 WHERE id=?', (first_id,))
     conn.commit()
     conn.close()

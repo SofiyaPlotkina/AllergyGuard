@@ -7,6 +7,10 @@ class RecipeRequest(BaseModel):
     source: Optional[str] = "Unbekannt"
 
 
-class ProfileRequest(BaseModel):
+class UserProfile(BaseModel):
     name: str
     allergy: str
+
+
+class SelectionUpdate(BaseModel):
+    selected: bool

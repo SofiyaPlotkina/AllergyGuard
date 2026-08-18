@@ -9,15 +9,35 @@
         return response.json();
     }
 
-    async function getProfile() {
-        return request('/profile');
+    async function getUsers() {
+        return request('/users');
     }
 
-    async function saveProfile(name, allergy) {
-        return request('/profile', {
+    async function createUser(name, allergy) {
+        return request('/users', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, allergy }),
+        });
+    }
+
+    async function updateUser(id, name, allergy) {
+        return request(`/users/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, allergy }),
+        });
+    }
+
+    async function deleteUser(id) {
+        return request(`/users/${id}`, { method: 'DELETE' });
+    }
+
+    async function setUserSelected(id, selected) {
+        return request(`/users/${id}/selection`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ selected }),
         });
     }
 
@@ -34,8 +54,11 @@
     }
 
     window.AllergyGuard.api = {
-        getProfile,
-        saveProfile,
+        getUsers,
+        createUser,
+        updateUser,
+        deleteUser,
+        setUserSelected,
         getHistory,
         checkRecipe,
     };

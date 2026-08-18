@@ -7,7 +7,7 @@ import logging
 
 from config import SPUREN_PHRASEN
 from database import db, init_db
-from models import ProfileRequest, RecipeRequest
+from models import UserProfile, SelectionUpdate, RecipeRequest
 from allergen_db import get_replacement_for_term, load_synonyms_into_cache
 from synonym_matcher import synonyme_fuer, synonym_matching
 from openfoodfacts_client import suche_off, off_allergene_pruefen
@@ -93,63 +93,90 @@ def extrahiere_produktnamen(text: str) -> list[str]:
 
 
 # ── Endpunkte ─────────────────────────────────────────────────────────────────
-@app.get("/profile")
-def get_profile():
+@app.get("/users")
+def list_users():
     """
-    Get the current user profile.
-    
-    Returns the user's name and allergen list. If no profile exists yet,
-    returns empty strings.
-    
+    List all saved user profiles.
+
+    Multiple profiles can be "selected" at once — their allergen lists are
+    combined when checking a recipe (e.g. for a dinner party with several
+    guests who each have their own profile).
+
     Returns:
-        dict: Profile data with keys:
-            - name (str): User's name
+        list[dict]: All profiles ordered by id, each with keys:
+            - id (int)
+            - name (str)
             - allergy (str): Comma-separated list of allergens
-    
-    Example response:
-        {
-            "name": "Max Mustermann",
-            "allergy": "ei,milch,nüsse"
-        }
+            - selected (bool): Whether this profile is included in checks
     """
     conn = db()
-    user = conn.execute('SELECT name, allergy FROM users LIMIT 1').fetchone()
+    rows = conn.execute('SELECT id, name, allergy, selected FROM users ORDER BY id').fetchall()
     conn.close()
-    if not user:
-        return {"name": "", "allergy": ""}
-    return {"name": user["name"], "allergy": user["allergy"]}
+    return [
+        {"id": r["id"], "name": r["name"], "allergy": r["allergy"], "selected": bool(r["selected"])}
+        for r in rows
+    ]
 
 
-@app.post("/profile")
-def save_profile(req: ProfileRequest):
+@app.post("/users")
+def create_user(req: UserProfile):
     """
-    Save or update the user profile.
-    
-    Creates a new user profile if none exists, otherwise updates the existing one.
-    Only one user profile is supported per database instance.
-    
+    Create a new user profile. New profiles are selected by default.
+
     Args:
-        req (ProfileRequest): Profile data containing:
-            - name (str): User's name
-            - allergy (str): Comma-separated allergen list (e.g., "ei,milch,nüsse")
-    
+        req (UserProfile): name and comma-separated allergy list.
+
     Returns:
-        dict: Status response with key:
-            - status (str): "ok" on success
-    
-    Example request body:
-        {
-            "name": "Max Mustermann",
-            "allergy": "ei,milch,nüsse"
-        }
+        dict: The created profile, including its new id and selected=True.
     """
     conn = db()
-    existing = conn.execute('SELECT id FROM users LIMIT 1').fetchone()
-    if existing:
-        conn.execute('UPDATE users SET name=?, allergy=? WHERE id=?',
-                     (req.name, req.allergy, existing["id"]))
-    else:
-        conn.execute('INSERT INTO users (name, allergy) VALUES (?,?)', (req.name, req.allergy))
+    cursor = conn.execute(
+        'INSERT INTO users (name, allergy, selected) VALUES (?, ?, 1)', (req.name, req.allergy)
+    )
+    conn.commit()
+    user_id = cursor.lastrowid
+    conn.close()
+    return {"id": user_id, "name": req.name, "allergy": req.allergy, "selected": True}
+
+
+@app.put("/users/{user_id}")
+def update_user(user_id: int, req: UserProfile):
+    """
+    Update an existing user profile's name and allergy list.
+    """
+    conn = db()
+    existing = conn.execute('SELECT id FROM users WHERE id=?', (user_id,)).fetchone()
+    if not existing:
+        conn.close()
+        return {"error": "Profil nicht gefunden."}
+    conn.execute('UPDATE users SET name=?, allergy=? WHERE id=?', (req.name, req.allergy, user_id))
+    conn.commit()
+    conn.close()
+    return {"status": "ok"}
+
+
+@app.delete("/users/{user_id}")
+def delete_user(user_id: int):
+    """
+    Delete a user profile.
+    """
+    conn = db()
+    conn.execute('DELETE FROM users WHERE id=?', (user_id,))
+    conn.commit()
+    conn.close()
+    return {"status": "ok"}
+
+
+@app.patch("/users/{user_id}/selection")
+def set_user_selection(user_id: int, req: SelectionUpdate):
+    """
+    Mark a user profile as selected/unselected for allergen checks.
+
+    Multiple users can be selected simultaneously; their allergen lists are
+    combined (union) when checking a recipe via /check-recipe.
+    """
+    conn = db()
+    conn.execute('UPDATE users SET selected=? WHERE id=?', (1 if req.selected else 0, user_id))
     conn.commit()
     conn.close()
     return {"status": "ok"}
@@ -252,14 +279,23 @@ def check_recipe(request: RecipeRequest):
         }
     """
     conn = db()
-    user = conn.execute('SELECT name, allergy FROM users LIMIT 1').fetchone()
+    selected_users = conn.execute('SELECT name, allergy FROM users WHERE selected=1').fetchall()
     conn.close()
-    if not user:
-        return {"error": "Kein Benutzerprofil gefunden. Bitte Profil anlegen."}
+    if not selected_users:
+        return {"error": "Kein Benutzerprofil ausgewählt. Bitte mindestens ein Profil im Profil-Tab auswählen."}
 
-    user_name    = user["name"]
-    user_allergy = user["allergy"]
-    allergien    = [a.strip() for a in user_allergy.split(",") if a.strip()]
+    user_name = ", ".join(u["name"] for u in selected_users)
+
+    # Allergien aller ausgewählten Profile kombinieren (Vereinigung, ohne Duplikate)
+    allergien: list[str] = []
+    gesehen = set()
+    for u in selected_users:
+        for a in u["allergy"].split(","):
+            a = a.strip()
+            if a and a.lower() not in gesehen:
+                gesehen.add(a.lower())
+                allergien.append(a)
+    user_allergy = ", ".join(allergien)
     text         = request.ingredients
     
     # DEBUG: Log KOMPLETTEN extrahierten Text
