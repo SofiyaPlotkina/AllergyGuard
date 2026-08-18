@@ -332,6 +332,15 @@ def check_recipe(request: RecipeRequest):
     gefahr_funde = [f for f in funde if not f.get("ist_spur")]
     spuren_funde = [f for f in funde if f.get("ist_spur")]
 
+    # Redundante Spurenhinweise unterdrücken: Wenn ein Allergen bereits direkt
+    # (GEFAHR) gefunden wurde, bringt ein zusätzlicher "Kann Spuren enthalten"-
+    # Hinweis für DASSELBE Allergen keine neue Information mehr - nur unnötige
+    # Verwirrung (z.B. "Milchpulver" in Zutaten + generischer "Kann Spuren von
+    # Milch"-Disclaimer). Andere Allergene mit eigenen Spurenhinweisen bleiben.
+    bereits_direkt_gefunden = {f["allergie"] for f in gefahr_funde}
+    spuren_funde = [f for f in spuren_funde if f["allergie"] not in bereits_direkt_gefunden]
+    funde = gefahr_funde + spuren_funde
+
     if gefahr_funde:
         urteil = "GEFAHR"
     elif spuren_funde:

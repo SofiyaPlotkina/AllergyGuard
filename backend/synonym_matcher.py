@@ -4,7 +4,7 @@ import re
 import logging
 
 from allergen_db import get_all_allergen_synonyms, get_replacement_for_term
-from config import SPUREN_PHRASEN, WORTGRENZE_SYNONYME
+from config import SPUREN_PHRASEN, SPUREN_MUSTER, WORTGRENZE_SYNONYME
 from text_filter import extrahiere_zutaten_sektion
 from filters import ist_false_positive, ist_protein_kontext
 
@@ -129,16 +129,21 @@ def synonym_matching(text: str, user_allergien: list[str]) -> list[dict]:
             # Prüfe JEDE Position auf Spurenhinweise
             # Wenn IRGENDEINE Position eine Spur ist, ist das GANZE eine Spur
             ist_spur = False
-            
+
             for match in matches:
                 pos = match.start()
-                # Kontext: ±150 Zeichen um die Fundstelle
-                kontext_start = max(0, pos - 150)
-                kontext_end = min(len(text_lower), pos + len(synonym) + 150)
-                kontext = text_lower[kontext_start:kontext_end]
-                
+                # Kontext = eigene Zeile (nicht ein festes ±150-Zeichen-Fenster!),
+                # sonst "bleedet" der Kontext über Zeilen-/Abschnittsgrenzen hinweg
+                # und eine Zutat wie "Milchpulver" wird fälschlich zur Spur, nur
+                # weil ein "Kann Spuren von..."-Hinweis irgendwo in der Nähe steht.
+                zeile_start = zutaten_text.rfind('\n', 0, pos)
+                zeile_start = 0 if zeile_start == -1 else zeile_start + 1
+                zeile_end = zutaten_text.find('\n', pos)
+                zeile_end = len(zutaten_text) if zeile_end == -1 else zeile_end
+                kontext = text_lower[zeile_start:zeile_end]
+
                 # Wenn IRGENDWO im Kontext eine Spurenphrase ist → ist_spur = True
-                if any(p in kontext for p in SPUREN_PHRASEN):
+                if any(p in kontext for p in SPUREN_PHRASEN) or re.search(SPUREN_MUSTER, kontext):
                     ist_spur = True
                     break  # Wir wissen jetzt, es ist eine Spur
             
