@@ -1,19 +1,10 @@
 (function () {
+    // Vorerst auf die vier häufigsten/schwersten Allergene begrenzt.
     const ALLE_ALLERGENE = [
-        { key: 'Erdnuss', emoji: '🥜', sub: 'Peanut, Arachis', top: true },
-        { key: 'Milch', emoji: '🥛', sub: 'Laktose, Kasein, Butter', top: true },
-        { key: 'Ei', emoji: '🥚', sub: 'Eiklar, Eigelb', top: true },
-        { key: 'Gluten', emoji: '🌾', sub: 'Weizen, Dinkel, Roggen', top: true },
-        { key: 'Soja', emoji: '🫘', sub: 'Tofu, Sojalecithin', top: true },
-        { key: 'Nüsse', emoji: '🌰', sub: 'Mandel, Haselnuss, Cashew', top: true },
-        { key: 'Fisch', emoji: '🐟', sub: 'Lachs, Thunfisch, Anchovis', top: true },
-        { key: 'Sesam', emoji: '🌿', sub: 'Tahini, Sesamöl', top: true },
-        { key: 'Sellerie', emoji: '🥬', sub: 'Selleriesalz, -öl', top: false },
-        { key: 'Senf', emoji: '🟡', sub: 'Senfkörner, Senfmehl', top: false },
-        { key: 'Lupine', emoji: '🌱', sub: 'Lupinenmehl, -protein', top: false },
-        { key: 'Krebstiere', emoji: '🦐', sub: 'Garnele, Hummer, Krabbe', top: false },
-        { key: 'Weichtiere', emoji: '🦑', sub: 'Muschel, Tintenfisch', top: false },
-        { key: 'Sulfite', emoji: '🍷', sub: 'E220–E228, Schwefeldioxid', top: false },
+        { key: 'Gluten', sub: 'Weizen, Dinkel, Roggen', top: true },
+        { key: 'Milch', sub: 'Laktose, Kasein, Butter', top: true },
+        { key: 'Erdnuss', sub: 'Peanut, Arachis', top: true },
+        { key: 'Ei', sub: 'Eiklar, Eigelb', top: true },
     ];
 
     // null = Formular legt ein neues Profil an; sonst id des bearbeiteten Profils
@@ -65,7 +56,7 @@
             const button = document.createElement('button');
             button.className = 'top-btn';
             button.dataset.key = allergen.key;
-            button.textContent = `${allergen.emoji} ${allergen.key}`;
+            button.textContent = allergen.key;
             button.addEventListener('click', () => {
                 toggleAllergen(allergen.key);
             });
@@ -80,7 +71,6 @@
             row.dataset.name = allergen.key.toLowerCase();
             row.innerHTML = `
                 <input type="checkbox" data-key="${allergen.key}">
-                <span class="a-emoji">${allergen.emoji}</span>
                 <span class="a-name">${allergen.key}</span>
                 <span class="a-sub">${allergen.sub}</span>
             `;
@@ -144,8 +134,8 @@
                     <div class="user-name">${user.name}</div>
                     <div class="user-allergy">${user.allergy}</div>
                 </div>
-                <button class="user-icon-btn user-edit" title="Bearbeiten">✏️</button>
-                <button class="user-icon-btn user-delete" title="Löschen">🗑️</button>
+                <button class="user-icon-btn user-edit">Bearbeiten</button>
+                <button class="user-icon-btn user-delete">Löschen</button>
             `;
             row.querySelector('.user-select').addEventListener('change', async event => {
                 await window.AllergyGuard.api.setUserSelected(user.id, event.target.checked);

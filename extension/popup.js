@@ -5,7 +5,7 @@ async function analyzeText(text, source, resultBox) {
     } catch {
         resultBox.innerHTML = `
             <p style="color:#c0392b;font-size:13px;">
-                ❌ Verbindung fehlgeschlagen.<br>
+                Verbindung fehlgeschlagen.<br>
                 <span style="color:#888;">Läuft der AllergyGuard-Server auf Port 8080?</span>
             </p>`;
     }
@@ -32,7 +32,7 @@ function setupTabs() {
 function setupScanButton() {
     document.getElementById('checkButton').addEventListener('click', async () => {
         const resultBox = document.getElementById('resultBox');
-        resultBox.innerHTML = '<p class="loading">🔍 Lese Seite & analysiere...</p>';
+        resultBox.innerHTML = '<p class="loading">Lese Seite & analysiere...</p>';
         document.getElementById('checkButton').disabled = true;
 
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -66,7 +66,7 @@ function setupManualButton() {
             return;
         }
 
-        resultBox.innerHTML = '<p class="loading">🔍 Analysiere...</p>';
+        resultBox.innerHTML = '<p class="loading">Analysiere...</p>';
         await analyzeText(text, 'Manuell eingegeben', resultBox);
     });
 }
