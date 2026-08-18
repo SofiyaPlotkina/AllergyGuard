@@ -3,6 +3,7 @@
 import datetime
 import json
 import re
+import time
 import requests
 import logging
 from typing import Optional
@@ -42,6 +43,43 @@ def off_cache_schreiben(key: str, data: dict):
     conn.close()
 
 
+def _off_get(url: str, params: Optional[dict] = None, timeout: int = 6) -> Optional[dict]:
+    """
+    GET-Request gegen die OFF-API mit einem kurzen Retry bei transienten Fehlern.
+    OFF begrenzt z.B. Suchanfragen auf 10/Minute - eine kurze Pause + ein zweiter
+    Versuch reicht meistens, um einen einzelnen fehlgeschlagenen Request abzufangen.
+    """
+    for versuch in range(2):
+        try:
+            r = requests.get(url, params=params, timeout=timeout,
+                             headers={"User-Agent": "AllergyGuard/1.0"})
+            return r.json()
+        except requests.RequestException as e:
+            logger.warning(f"OpenFoodFacts request failed ({url}): {e}")
+        except json.JSONDecodeError as e:
+            logger.warning(f"Could not parse OpenFoodFacts response ({url}): {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error calling OpenFoodFacts ({url}): {e}")
+            break  # unerwarteter Fehler - kein Retry
+        if versuch == 0:
+            time.sleep(0.6)
+    return None
+
+
+def _ergaenze_markenname(produkt: dict) -> dict:
+    """
+    OFF trennt Marke ('brands') und Produktname ('product_name') in zwei Feldern,
+    z.B. product_name='Wunderland Sauer', brands='Katjes'. Für Textabgleich und
+    Anzeige wird aber der volle Name inkl. Marke gebraucht - sonst schlägt z.B. die
+    Suche nach "Katjes" im Rezepttext fehl, obwohl OFF das Produkt korrekt gefunden hat.
+    """
+    name = (produkt.get("product_name") or "").strip()
+    marke = (produkt.get("brands") or "").split(",")[0].strip()
+    if marke and marke.lower() not in name.lower():
+        produkt = {**produkt, "product_name": f"{marke} {name}".strip() if name else marke}
+    return produkt
+
+
 def suche_off(query: str) -> Optional[dict]:
     """Sucht ein Produkt auf OpenFoodFacts. Gibt None zurück wenn nichts gefunden."""
     cached = off_cache_lesen(query)
@@ -51,24 +89,13 @@ def suche_off(query: str) -> Optional[dict]:
     # Barcode-Suche
     if re.fullmatch(r'\d{8,13}', query):
         url = f"https://world.openfoodfacts.org/api/v2/product/{query}.json"
-        try:
-            r = requests.get(url, timeout=5,
-                             headers={"User-Agent": "AllergyGuard/1.0"})
-            data = r.json()
-            if data.get("status") == 1:
-                result = data.get("product", {})
-                off_cache_schreiben(query, result)
-                # Barcode-Treffer sind eindeutig -> ohne Vorbehalt in die lokale Tabelle
-                off_produkt_cachen(result, quelle="barcode")
-                return result
-
-        except requests.RequestException as e:
-            logger.warning(f"OpenFoodFacts API request failed for barcode {query}: {e}")
-        except json.JSONDecodeError as e:
-            logger.warning(f"Failed to parse OpenFoodFacts response: {e}")
-        except Exception as e:
-            logger.error(f"Unexpected error querying OpenFoodFacts: {e}")
-
+        data = _off_get(url, timeout=5)
+        if data and data.get("status") == 1:
+            result = _ergaenze_markenname(data.get("product", {}))
+            off_cache_schreiben(query, result)
+            # Barcode-Treffer sind eindeutig -> ohne Vorbehalt in die lokale Tabelle
+            off_produkt_cachen(result, quelle="barcode")
+            return result
         return None
 
     # Unverifizierte OFF-Volltextsuche. Nicht direkt vertrauen (siehe
@@ -81,25 +108,15 @@ def suche_off(query: str) -> Optional[dict]:
         "action": "process",
         "json": 1,
         "page_size": 3,
-        "fields": "product_name,code,allergens_tags,allergens,traces_tags,ingredients_text",
+        "fields": "product_name,brands,code,allergens_tags,allergens,traces_tags,ingredients_text",
     }
-    try:
-        r = requests.get(url, params=params, timeout=6,
-                         headers={"User-Agent": "AllergyGuard/1.0"})
-        data = r.json()
-        products = data.get("products", [])
-        # Ersten Treffer mit Allergen-Daten bevorzugen
-        for p in products:
+    data = _off_get(url, params=params, timeout=7)
+    if data:
+        for p in data.get("products", []):
             if p.get("allergens_tags") or p.get("ingredients_text"):
+                p = _ergaenze_markenname(p)
                 off_cache_schreiben(query, p)
                 return p
-
-    except requests.RequestException as e:
-        logger.warning(f"OpenFoodFacts search request failed for '{query}': {e}")
-    except json.JSONDecodeError as e:
-        logger.warning(f"Failed to parse OpenFoodFacts search response: {e}")
-    except Exception as e:
-        logger.error(f"Unexpected error in OpenFoodFacts search: {e}")
 
     return None
 
@@ -110,7 +127,25 @@ _MENGENANGABE_MUSTER = re.compile(
     r'\b\d+([.,]\d+)?\s*(g|kg|ml|l|stk|stück|pack|packung)\b', re.IGNORECASE
 )
 MIN_MATCH_LAENGE = 4          # zu kurze Produktnamen führen zu Falschtreffern (z.B. "Ei")
-VERIFIKATIONS_SCHWELLE = 0.5  # Mindest-Wortüberlappung, damit ein Suchtreffer akzeptiert wird
+VERIFIKATIONS_SCHWELLE = 1.0  # welcher Anteil der Kandidaten-Wörter im Treffer stecken muss
+
+# Deutsche Koch-/Back-/Rezeptbegriffe: großgeschrieben (Nomen), aber praktisch nie
+# Markennamen - werden aus den Markennamen-Kandidaten rausgefiltert
+HAEUFIGE_KOCHWOERTER = {
+    "zutaten", "zubereitung", "rezept", "portion", "portionen", "mehl",
+    "zucker", "salz", "wasser", "milch", "butter", "sahne", "quark", "ei",
+    "eier", "hefe", "backpulver", "vanille", "schokolade", "honig", "zimt",
+    "minuten", "stunden", "grad", "ofen", "pfanne", "topf", "schüssel",
+    "prise", "esslöffel", "teelöffel", "tasse", "packung", "beutel",
+    "riegel", "kekse", "chips", "drink", "snack", "müsli", "joghurt",
+    "produktbeschreibung", "allergene", "nährwerte", "inhaltsstoffe",
+    "beschreibung", "details", "information", "geschmack",
+}
+# Häufige Satzanfänge/Funktionswörter, die im Deutschen ebenfalls großgeschrieben sind
+HAEUFIGE_FUNKTIONSWOERTER = {
+    "ich", "der", "die", "das", "und", "für", "mit", "bei", "ein", "eine",
+    "dann", "danach", "heute", "dabei", "dazu", "alles", "man", "wir",
+}
 
 
 def normalisiere_name(name: str) -> str:
@@ -121,13 +156,40 @@ def normalisiere_name(name: str) -> str:
     return re.sub(r'\s+', ' ', name).strip()
 
 
-def _wort_ueberlappung(a: str, b: str) -> float:
-    """Jaccard-Ähnlichkeit zweier Namen auf Wortbasis (0 = nichts gemeinsam, 1 = identisch)."""
-    tokens_a = set(normalisiere_name(a).split())
-    tokens_b = set(normalisiere_name(b).split())
-    if not tokens_a or not tokens_b:
+def _kandidat_abdeckung(kandidat: str, produktname: str) -> float:
+    """
+    Anteil der Wörter aus `kandidat`, die auch im `produktname` vorkommen (0-1).
+
+    Bewusst nicht symmetrisch (kein Jaccard): ein kurzer Kandidat wie "Bueno" soll
+    nicht dafür bestraft werden, dass der offizielle OFF-Name länger ist
+    ("Kinder Bueno White") - es zählt nur, ob der Kandidat komplett im Treffer steckt.
+    """
+    tokens_kandidat = set(normalisiere_name(kandidat).split())
+    tokens_produkt = set(normalisiere_name(produktname).split())
+    if not tokens_kandidat or not tokens_produkt:
         return 0.0
-    return len(tokens_a & tokens_b) / len(tokens_a | tokens_b)
+    return len(tokens_kandidat & tokens_produkt) / len(tokens_kandidat)
+
+
+def _markennamen_kandidaten(text: str) -> list[str]:
+    """
+    Grobe Heuristik für mögliche Markennamen im Freitext: einzelne großgeschriebene
+    Wörter (Marken sind so gut wie immer großgeschrieben - auch bei kurzer manueller
+    Eingabe wie "Bueno"), abzüglich gängiger deutscher Koch-/Funktionswörter.
+
+    Bewusst großzügig: die eigentliche Absicherung gegen Falschtreffer passiert über
+    die Wort-Abdeckungs-Prüfung in off_produkt_im_text_finden, nicht schon hier.
+    """
+    kandidaten = []
+    gesehen = set()
+    for match in re.finditer(r'\b[A-ZÄÖÜ][a-zäöüßA-ZÄÖÜ]{2,}\b', text):
+        wort = match.group(0)
+        key = wort.lower()
+        if key in HAEUFIGE_KOCHWOERTER or key in HAEUFIGE_FUNKTIONSWOERTER or key in gesehen:
+            continue
+        gesehen.add(key)
+        kandidaten.append(wort)
+    return kandidaten
 
 
 def off_produkt_cachen(produkt: dict, quelle: str):
@@ -253,7 +315,19 @@ def off_produkt_im_text_finden(text: str) -> Optional[dict]:
     if lokal:
         return lokal
 
-    for kandidat in extrahiere_produktnamen(text):
+    # Zwei ergänzende Kandidatenquellen: die enge Heuristik (strukturierter
+    # Produkttext) plus großgeschriebene Wörter (deckt auch kurze, direkte
+    # Markennamen-Eingaben wie "Bueno" ab) - Reihenfolge, Dopplungen entfernt
+    kandidaten = []
+    gesehen = set()
+    for kandidat in extrahiere_produktnamen(text) + _markennamen_kandidaten(text):
+        key = kandidat.lower()
+        if key in gesehen:
+            continue
+        gesehen.add(key)
+        kandidaten.append(kandidat)
+
+    for kandidat in kandidaten[:6]:  # Anzahl der Live-Suchen pro Scan begrenzen
         if re.fullmatch(r'\d{8,13}', kandidat):
             continue  # Barcodes laufen bereits über den eigenen Barcode-Pfad in main.py
 
@@ -261,13 +335,13 @@ def off_produkt_im_text_finden(text: str) -> Optional[dict]:
         if not treffer:
             continue
 
-        ähnlichkeit = _wort_ueberlappung(kandidat, treffer.get("product_name", ""))
-        if ähnlichkeit >= VERIFIKATIONS_SCHWELLE:
+        abdeckung = _kandidat_abdeckung(kandidat, treffer.get("product_name", ""))
+        if abdeckung >= VERIFIKATIONS_SCHWELLE:
             off_produkt_cachen(treffer, quelle="search_confirmed")
             return treffer
 
         logger.info(
-            f"OFF-Suchtreffer verworfen (Wortüberlappung {ähnlichkeit:.2f} < {VERIFIKATIONS_SCHWELLE}): "
+            f"OFF-Suchtreffer verworfen (Abdeckung {abdeckung:.2f} < {VERIFIKATIONS_SCHWELLE}): "
             f"'{kandidat}' -> '{treffer.get('product_name')}'"
         )
 
