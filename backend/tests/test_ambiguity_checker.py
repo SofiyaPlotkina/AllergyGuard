@@ -28,3 +28,24 @@ class TestBrauchtKiCheck:
 
     def test_leere_funde_liste_braucht_keinen_ki_check(self):
         assert braucht_ki_check([], "irgendein Text") is False
+
+    def test_ambiges_synonym_mit_false_positive_kontext_braucht_ki_check(self):
+        # Auch bei einem anderen Allergen als "Ei" prueft braucht_ki_check() den
+        # Text-Kontext um "eiweiß" herum, sobald das Synonym ueberhaupt in
+        # AMBIGE_SYNONYME vorkommt.
+        funde = [{"allergie": "Milch", "synonym": "eiweiß"}]
+        text = "Nährwerte: Eiweiß, 10g protein pro Portion"
+
+        assert braucht_ki_check(funde, text) is True
+
+    def test_ambiges_synonym_ohne_false_positive_kontext_braucht_keinen_ki_check(self):
+        funde = [{"allergie": "Milch", "synonym": "eiweiß"}]
+        text = "Zutaten: Vollei, Eiweiß, Mehl"
+
+        assert braucht_ki_check(funde, text) is False
+
+    def test_synonym_nicht_im_text_wird_uebersprungen(self):
+        funde = [{"allergie": "Milch", "synonym": "eiweiß"}]
+        text = "Dieser Text enthält das Wort gar nicht"
+
+        assert braucht_ki_check(funde, text) is False
