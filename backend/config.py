@@ -9,12 +9,17 @@ except ImportError:
     pass
 
 SPUREN_PHRASEN = [
-    "kann spuren enthalten", "kann spuren von",
+    "kann spuren enthalten", "kann spuren von", "kann enthalten",
     "may contain", "may contain traces",
     "spuren von", "traces of",
     "nicht geeignet für personen mit allergie",
     "hergestellt in einem betrieb", "in derselben anlage",
 ]
+
+# Erfasst zusätzlich "Kann <Allergen(e)> enthalten" mit Text dazwischen
+# (z.B. "Kann Schalenfrüchte, Erdnüsse, Lupin, Sesam enthalten"), nicht nur
+# die exakte Formulierung "kann enthalten" ohne Zwischenwörter
+SPUREN_MUSTER = r'kann\s+.{0,60}?enthalten'
 
 OFF_CACHE_TTL_DAYS = int(os.getenv("OFF_CACHE_TTL_DAYS", "7"))
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
