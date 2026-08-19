@@ -1,13 +1,14 @@
 import os
 
-# Try to load .env file if python-dotenv is installed
+# .env für Umgebungsvariablen laden, wenn lokal wntwickelt wird
 try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
-    # python-dotenv not installed, use OS environment variables only
+    # wenn kein python-dotenv, dann nicht lokal, nutze also OS Umgebungsvariablen (pass einfach erstmal)
     pass
 
+# Verschiedene Möglichkeiten, auf SPuren zu verweisen. Evtl später raus aus config.py???
 SPUREN_PHRASEN = [
     "kann spuren enthalten", "kann spuren von", "kann enthalten",
     "may contain", "may contain traces",
@@ -18,7 +19,8 @@ SPUREN_PHRASEN = [
 
 # Erfasst zusätzlich "Kann <Allergen(e)> enthalten" mit Text dazwischen
 # (z.B. "Kann Schalenfrüchte, Erdnüsse, Lupin, Sesam enthalten"), nicht nur
-# die exakte Formulierung "kann enthalten" ohne Zwischenwörter
+# die exakte Formulierung "kann enthalten" ohne Zwischenwörter 
+# --> habe diesen Regex mit Claude erstellt, darauf bei "KI Nutzung" verweisen
 SPUREN_MUSTER = r'kann\s+.{0,60}?enthalten'
 
 OFF_CACHE_TTL_DAYS = int(os.getenv("OFF_CACHE_TTL_DAYS", "7"))

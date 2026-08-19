@@ -189,7 +189,7 @@ def check_recipe(request: RecipeRequest):
         if produkt:
             logger.info(f"Product via Textmatch: {produkt.get('product_name')}")
 
-    # 1c) Allergene in OFF prüfen + Synonyme lernen
+    # Wenn Produkt im Freitext - Allergene aus OFF, dann Synonym Learning
     if produkt:
         off_funde = off_allergene_pruefen(produkt, allergien)
         if off_funde:
@@ -203,9 +203,8 @@ def check_recipe(request: RecipeRequest):
         else:
             logger.warning("Product found, but no allergens in OFF-DB")
 
-    # TIER 2: Local Synonym-DB (instant <100ms, static + learned) - läuft immer
-    # über den GESAMTEN Text, unabhängig davon ob Tier 1 schon etwas gefunden hat.
-    # Sonst würde z.B. "Weizenmehl" neben einem erkannten OFF-Produkt ignoriert.
+    # TIER 2: Lokale Synonym DB
+    # Läuft immer, auch wenn in Tier 1 etwas gefunden
     logger.info("[TIER 2] Local Synonym-Matching")
     synonym_funde = synonym_matching(text, allergien)
 
@@ -216,10 +215,9 @@ def check_recipe(request: RecipeRequest):
     else:
         logger.info("No allergens found via synonym matching")
 
-    # TIER 3: Ollama AI (slow ~2-3s) - nur wenn WEDER OFF noch Synonym-Matching
-    # irgendetwas gefunden haben (echter Last-Resort-Fallback)
+    # TIER 3: Ollama AI, nur wenn WEDER OFF noch Synonym-Matching etwas finden
     if not funde:
-        logger.info("[TIER 3] AI-Analysis (Ollama) as LAST RESORT FALLBACK")
+        logger.info("[TIER 3] AI-Analysis (Ollama) as FALLBACK")
         try:
             ollama_funde = analyse_mit_ollama(text, allergien)
 
@@ -232,22 +230,21 @@ def check_recipe(request: RecipeRequest):
         except Exception as e:
             logger.warning(f"AI analysis failed: {e}")
 
+    # Gibt aus, welches Tier am Ende etwas gefunden hat
     methode = "+".join(dict.fromkeys(methode_teile)) if methode_teile else "synonym"
     logger.info(f"FINAL METHOD: {methode.upper()}")
 
-    # ── Gesamturteil ──────────────────────────────────────────────────────────
+  # Gefundenes splitten in "echte" Zutat vs Spuren
     gefahr_funde = [f for f in funde if not f.get("ist_spur")]
     spuren_funde = [f for f in funde if f.get("ist_spur")]
 
-    # Redundante Spurenhinweise unterdrücken: Wenn ein Allergen bereits direkt
-    # (GEFAHR) gefunden wurde, bringt ein zusätzlicher "Kann Spuren enthalten"-
-    # Hinweis für DASSELBE Allergen keine neue Information mehr - nur unnötige
-    # Verwirrung (z.B. "Milchpulver" in Zutaten + generischer "Kann Spuren von
-    # Milch"-Disclaimer). Andere Allergene mit eigenen Spurenhinweisen bleiben.
+    # Spuren Deduplizierung - Wenn bestimmtes Allergen schon als echte Zutat gefunden wurde, dann Spuren Fund ignorieren
+    # Gegen redundante Info Anzeige
     bereits_direkt_gefunden = {f["allergie"] for f in gefahr_funde}
     spuren_funde = [f for f in spuren_funde if f["allergie"] not in bereits_direkt_gefunden]
     funde = gefahr_funde + spuren_funde
 
+    # Finales "Urteil" ermitteln
     if gefahr_funde:
         urteil = "GEFAHR"
     elif spuren_funde:
@@ -255,6 +252,7 @@ def check_recipe(request: RecipeRequest):
     else:
         urteil = "SICHER"
 
+    # Text für Ausgabe Zusammenbauen    
     erster_fund        = (gefahr_funde or spuren_funde or [None])[0]
     gefundenes_synonym = erster_fund["synonym"] if erster_fund else ""
     gefunden_in        = erster_fund["fundstelle"] if erster_fund else ""
@@ -268,7 +266,7 @@ def check_recipe(request: RecipeRequest):
     else:
         grund = f'Keine Allergene gefunden. (via {methode})'
 
-    # ── Result-Objekt bauen ───────────────────────────────────────────────────
+    # JSON Response erstellen
     result = {
         "nutzer":             user_name,
         "allergie_geprueft":  user_allergy,
@@ -280,7 +278,7 @@ def check_recipe(request: RecipeRequest):
         "alle_funde":         funde,
     }
 
-    # ── Verlauf speichern ─────────────────────────────────────────────────────
+    # Diesen Durchlauf in den Verlauf schreiben (letzte 20 Einträge bleiben drin)
     conn = db()
     conn.execute(
         '''INSERT INTO history
@@ -304,7 +302,7 @@ def check_recipe(request: RecipeRequest):
 
     return result
 
-
+# Server starten, wenn direkt ausgeführt
 if __name__ == "__main__":
     import uvicorn
     from config import SERVER_HOST, SERVER_PORT
