@@ -1,4 +1,4 @@
-from openfoodfacts_client import off_allergene_pruefen
+from openfoodfacts_client import off_allergene_pruefen, _markennamen_kandidaten
 
 
 class TestOffAllergenePruefen:
@@ -49,3 +49,22 @@ class TestOffAllergenePruefen:
 
         gefundene_allergien = {f["allergie"] for f in funde}
         assert gefundene_allergien == {"Erdnuss", "Milch"}
+
+
+class TestMarkennamenKandidaten:
+    def test_einzelnes_grossgeschriebenes_wort_wird_als_kandidat_erkannt(self):
+        assert _markennamen_kandidaten("Bueno") == ["Bueno"]
+
+    def test_wenige_kandidaten_bleiben_erhalten(self):
+        kandidaten = _markennamen_kandidaten("Ich habe einen Bueno Riegel gegessen")
+
+        assert "Bueno" in kandidaten
+        assert len(kandidaten) <= 3
+
+    def test_zu_viele_kandidaten_ergeben_leere_liste(self):
+        # Ganze Zutatenlisten mit vielen großgeschriebenen Begriffen (z.B.
+        # Rezept-Unterüberschriften) sollen NICHT als gezielte Markennennung
+        # gewertet werden - lieber gar kein Kandidat als geraten.
+        text = "Ich habe einen Bueno Riegel gegessen Heute Toll Super Klasse"
+
+        assert _markennamen_kandidaten(text) == []

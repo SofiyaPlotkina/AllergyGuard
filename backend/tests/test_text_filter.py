@@ -28,7 +28,7 @@ class TestExtrahiereZutatenSektion:
         assert extrahiere_zutaten_sektion(text) == text
 
     def test_langer_text_ohne_marker_wird_verworfen(self):
-        text = "Lorem ipsum dolor sit amet consectetur adipiscing elit. " * 20
+        text = "Lorem ipsum dolor sit amet consectetur adipiscing elit. " * 60
 
         assert extrahiere_zutaten_sektion(text) == ""
 
@@ -42,3 +42,30 @@ class TestExtrahiereZutatenSektion:
 
         assert "Brennwert" not in result
         assert "Kohlenhydrate" not in result
+
+    def test_widget_ueberschrift_ohne_doppelpunkt_wird_uebersprungen(self):
+        # Manche Rezeptseiten zeigen "Zutaten" zuerst als reine Überschrift
+        # ohne Doppelpunkt (z.B. gefolgt von Backform-Einstellungen), bevor
+        # die eigentliche Liste mit "Zutaten:" kommt. Nur die echte Liste
+        # soll extrahiert werden.
+        text = "Zutaten\n(Backform 20cm)\n\nZutaten: Mehl, Zucker, Salz."
+
+        result = extrahiere_zutaten_sektion(text)
+
+        assert "Mehl, Zucker, Salz" in result
+        assert "Backform" not in result
+
+    def test_kurze_aussage_marker_wird_am_satzende_gekappt(self):
+        # "Allergene:"/"Kann Spuren enthalten" leiten typischerweise einen
+        # kurzen Satz ein - nachfolgender Marketing-Text im selben Absatz
+        # darf nicht mit erfasst werden.
+        text = (
+            "Zutaten: Mehl, Zucker.\n\n"
+            "Allergene: Kann Spuren von Nüssen enthalten. "
+            "Dieses Produkt ist toll und beliebt bei Kunden."
+        )
+
+        result = extrahiere_zutaten_sektion(text)
+
+        assert "Nüssen" in result
+        assert "beliebt bei Kunden" not in result

@@ -87,3 +87,39 @@ class TestSynonymMatching:
         funde = synonym_matching(text, ["Ei"])
 
         assert funde == []
+
+    def test_kann_enthalten_ohne_zwischenwoerter_wird_als_spur_erkannt(self):
+        text = "Zutaten: Zucker, Salz. Kann Erdnuss enthalten."
+        funde = synonym_matching(text, ["Erdnuss"])
+
+        assert len(funde) == 1
+        assert funde[0]["ist_spur"] is True
+
+    def test_kann_mehrere_allergene_enthalten_wird_als_spur_erkannt(self):
+        text = "Zutaten: Zucker, Salz. Kann Schalenfrüchte, Erdnuss, Lupine, Sesam enthalten."
+        funde = synonym_matching(text, ["Erdnuss"])
+
+        assert len(funde) == 1
+        assert funde[0]["ist_spur"] is True
+
+    def test_spurenhinweis_in_anderer_zeile_faerbt_zutat_nicht_als_spur_ein(self):
+        # Regression: der Spuren-Kontext darf nicht mehr über ein festes
+        # ±150-Zeichen-Fenster in eine andere Zeile "bleeden" - eine echte
+        # Zutat wie Milchpulver bleibt GEFAHR, auch wenn nahebei (aber in
+        # einer eigenen Zeile) ein allgemeiner Spurenhinweis für ein anderes
+        # Allergen steht.
+        text = (
+            "Zutaten: Milchpulver, Zucker, Salz.\n"
+            "Kann Spuren von Erdnuss enthalten."
+        )
+        funde = synonym_matching(text, ["Milch"])
+
+        assert len(funde) == 1
+        assert funde[0]["ist_spur"] is False
+
+    def test_spurenhinweis_in_derselben_zeile_wird_erkannt(self):
+        text = "Zutaten: Zucker, Salz. Kann Spuren von Milch enthalten."
+        funde = synonym_matching(text, ["Milch"])
+
+        assert len(funde) == 1
+        assert funde[0]["ist_spur"] is True
