@@ -171,14 +171,21 @@ def _kandidat_abdeckung(kandidat: str, produktname: str) -> float:
     return len(tokens_kandidat & tokens_produkt) / len(tokens_kandidat)
 
 
+MAX_MARKENNAMEN_KANDIDATEN = 3  # bei mehr: eher eine Zutatenliste als eine gezielte Markennennung
+
+
 def _markennamen_kandidaten(text: str) -> list[str]:
     """
     Grobe Heuristik für mögliche Markennamen im Freitext: einzelne großgeschriebene
     Wörter (Marken sind so gut wie immer großgeschrieben - auch bei kurzer manueller
     Eingabe wie "Bueno"), abzüglich gängiger deutscher Koch-/Funktionswörter.
 
-    Bewusst großzügig: die eigentliche Absicherung gegen Falschtreffer passiert über
-    die Wort-Abdeckungs-Prüfung in off_produkt_im_text_finden, nicht schon hier.
+    Bewusst großzügig, ABER: liefert lieber gar nichts als zu viele Kandidaten.
+    Ganze Zutatenlisten (auch nach Abzug der Kochwörter) enthalten oft noch viele
+    großgeschriebene Begriffe (Rezept-Unterüberschriften, Formangaben etc.) - dort
+    wäre jede einzelne externe Live-Suche ein Ratespiel. Nur bei wenigen Kandidaten
+    ist das Signal stark genug, um wirklich von EINER gezielten Markennennung
+    auszugehen (z.B. "Bueno" oder "Ich habe einen Bueno-Riegel gegessen").
     """
     kandidaten = []
     gesehen = set()
@@ -189,6 +196,9 @@ def _markennamen_kandidaten(text: str) -> list[str]:
             continue
         gesehen.add(key)
         kandidaten.append(wort)
+
+    if len(kandidaten) > MAX_MARKENNAMEN_KANDIDATEN:
+        return []
     return kandidaten
 
 

@@ -5,6 +5,28 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Wörter, die auf manchen Rezeptseiten als eigene Überschrift OHNE Doppelpunkt
+# auftauchen (z.B. "Zutaten" als Widget-Titel, gefolgt von Backform-Einstellungen
+# und erst danach der eigentlichen Liste)
+_ALLEINSTEHENDE_UEBERSCHRIFTEN = {
+    "zutaten", "ingredients", "inhaltsstoffe", "zusammensetzung",
+    "allergene", "allergens", "składniki", "ingrediënten", "ingrédients",
+    "ingredientes", "ingredienti",
+}
+
+
+def _ergaenze_fehlende_doppelpunkte(text: str) -> str:
+    """
+    Erkennt Zeilen, die nur aus einem Überschriftswort ohne Doppelpunkt bestehen
+    (z.B. "Zutaten" als eigene Zeile), und ergänzt den Doppelpunkt - damit die
+    normale Marker-Erkennung unten das trotzdem als Abschnittsstart erkennt.
+    """
+    zeilen = text.split("\n")
+    for i, zeile in enumerate(zeilen):
+        if zeile.strip().lower() in _ALLEINSTEHENDE_UEBERSCHRIFTEN:
+            zeilen[i] = zeile.rstrip() + ":"
+    return "\n".join(zeilen)
+
 
 def extrahiere_zutaten_sektion(text: str) -> str:
     """
@@ -27,6 +49,7 @@ def extrahiere_zutaten_sektion(text: str) -> str:
         - Relevante Sektionen kombiniert
         - Original text wenn keine klaren Sektionen (sicherer als nichts zu finden)
     """
+    text = _ergaenze_fehlende_doppelpunkte(text)
     text_lower = text.lower()
     
     # ══════════════════════════════════════════════════════════════════════

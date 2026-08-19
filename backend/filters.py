@@ -75,14 +75,16 @@ GLUTENFREI_MARKER = [
 
 PROTEIN_KONTEXT_BEGRIFFE = [
     "protein", "g eiweiß", "% eiweiß", "eiweißgehalt", "eiweißquelle",
-    "proteingehalt", "proteinriegel", "proteinshake",
-    "reich an eiweiß", "hoher eiweißgehalt", "viel eiweiß",
+    "proteingehalt", "proteinquelle", "proteinriegel", "proteinshake",
+    "reich an eiweiß", "hoher eiweißgehalt", "mit eiweiß", "riegel mit eiweiß",
+    "viel eiweiß", "extra protein", "high protein",
     "nährwert", "je 100", "pro portion", "fitness", "sport",
+    "kalorien", "kohlenhydrate", "ballaststoffe", "muskel", "bodybuilding", "training",
 ]
 
 ZUTAT_KONTEXT_BEGRIFFE = [
     "zutaten:", "ingredients:", "enthält:", "besteht aus:",
-    "vollei", "eigelb", "eiklar", "hühnerei",
+    "vollei", "eigelb", "eiklar", "hühnerei", "eiprodukt",
 ]
 
 # Kontext der anzeigt, dass ein Allergen NICHT vorhanden ist (z.B. Ersatz/Negation)

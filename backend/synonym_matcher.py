@@ -6,7 +6,7 @@ import logging
 from allergen_db import get_all_allergen_synonyms, get_replacement_for_term
 from config import SPUREN_PHRASEN, WORTGRENZE_SYNONYME
 from text_filter import extrahiere_zutaten_sektion
-from filters import ist_false_positive
+from filters import ist_false_positive, ist_protein_kontext
 
 logger = logging.getLogger(__name__)  
 
@@ -119,12 +119,12 @@ def synonym_matching(text: str, user_allergien: list[str]) -> list[dict]:
                 logger.debug(f"FALSE POSITIVE filtered: '{synonym}' in '{fundstelle_temp[:60]}...'")
                 continue  # Skip this finding!
             
-            # FILTER: Überspringe Nährwerttabellen-Kontext (z.B. "Eiweiß 14 g")
-            if synonym == "eiweiß":
-                # Prüfe ob das Pattern "Eiweiß X g" oder "Eiweiß X gramm" ist
-                naehrwert_pattern = r'eiweiß\s*\d+[.,]?\d*\s*(g|gramm|mg|%)'
-                if any(re.search(naehrwert_pattern, text_lower[m.start():m.end()+20]) for m in matches):
-                    continue  # Skip - das ist die Nährwerttabelle
+            # FILTER: "Eiweiß" ist im Alltagsdeutsch meistens Protein, nicht Ei
+            # (Nährwerttabelle, Proteinriegel, ...). Nur bei klarem Zutaten-Kontext
+            # ("Zutaten: ... Eiweiß", "Eigelb, Eiweiß") wirklich als Ei werten.
+            if synonym == "eiweiß" and ist_protein_kontext(zutaten_text, fundstelle_temp):
+                logger.debug(f"'eiweiß' in Protein-Kontext gefiltert: '{fundstelle_temp[:60]}...'")
+                continue
             
             # Prüfe JEDE Position auf Spurenhinweise
             # Wenn IRGENDEINE Position eine Spur ist, ist das GANZE eine Spur
