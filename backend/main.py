@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+'''from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import datetime
 import json
@@ -376,10 +376,10 @@ def check_recipe(request: RecipeRequest):
     # ── Verlauf speichern ─────────────────────────────────────────────────────
     conn = db()
     conn.execute(
-        '''INSERT INTO history
-           (timestamp, source, urteil, allergie_geprueft, gefundenes_synonym, fundstelle, grund, methode, result_snapshot)
-           VALUES (?,?,?,?,?,?,?,?,?)''',
-        (
+        '''#INSERT INTO history
+           #(timestamp, source, urteil, allergie_geprueft, gefundenes_synonym, fundstelle, grund, methode, result_snapshot)
+           #VALUES (?,?,?,?,?,?,?,?,?),
+        '''(
             datetime.datetime.now().isoformat(),
             request.source or "Unbekannt",
             urteil, user_allergy,
@@ -388,9 +388,9 @@ def check_recipe(request: RecipeRequest):
         )
     )
     conn.execute('''
-        DELETE FROM history WHERE id NOT IN (
-            SELECT id FROM history ORDER BY timestamp DESC LIMIT 20
-        )
+        #DELETE FROM history WHERE id NOT IN (
+            #SELECT id FROM history ORDER BY timestamp DESC LIMIT 20
+        #)
     ''')
     conn.commit()
     conn.close()
@@ -404,3 +404,4 @@ if __name__ == "__main__":
     
     logger.info(f"Starting AllergyGuard server on {SERVER_HOST}:{SERVER_PORT}")
     uvicorn.run(app, host=SERVER_HOST, port=SERVER_PORT)
+'''
