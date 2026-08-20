@@ -1,4 +1,4 @@
-"""Database access layer for allergen data"""
+"""Database access layer for allergen data""" # Claude Unterstützung in dieser Datei markieren!
 
 import sqlite3
 from typing import List, Dict
@@ -11,14 +11,16 @@ logger = logging.getLogger(__name__)
 # In-Memory Cache für Performance
 _SYNONYM_CACHE: Dict[str, List[str]] = {}
 _REPLACEMENT_CACHE: Dict[str, List[str]] = {}
+_OFF_TAG_MAP_CACHE: Dict[str, str] = {}
 
 
 def load_synonyms_into_cache():
     """Load all synonyms from DB into memory cache (called once at startup)"""
     global _SYNONYM_CACHE
     
+    # Wenn schon befüllt, nichts machen
     if _SYNONYM_CACHE:
-        return  # Already loaded
+        return  
     
     logger.info("Loading allergen synonyms from database into cache...")
     
@@ -66,7 +68,7 @@ def get_replacement_for_term(term: str) -> List[str]:
     """Get replacement suggestions for an allergen term"""
     global _REPLACEMENT_CACHE
     
-    # Lazy load replacements
+    # Lazy load replacements --> nur wenn gebraucht!!
     if not _REPLACEMENT_CACHE:
         conn = sqlite3.connect(DATABASE_PATH)
         cursor = conn.cursor()
@@ -97,6 +99,30 @@ def get_replacement_for_term(term: str) -> List[str]:
         return best[1]
     
     return []
+
+
+def get_off_tag_map() -> Dict[str, str]:
+    """OpenFoodFacts-Tag (z.B. 'en:peanuts') -> unser Allergie-Name (z.B. 'erdnuss')"""
+    global _OFF_TAG_MAP_CACHE
+
+    if not _OFF_TAG_MAP_CACHE:
+        conn = sqlite3.connect(DATABASE_PATH)
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("SELECT off_tag, allergen FROM off_tag_map")
+            for off_tag, allergen in cursor.fetchall():
+                _OFF_TAG_MAP_CACHE[off_tag] = allergen
+
+            logger.info(f"[OK] Loaded {len(_OFF_TAG_MAP_CACHE)} OFF-Tag-Zuordnungen")
+
+        except sqlite3.OperationalError as e:
+            logger.warning(f"Could not load OFF tag map from database: {e}")
+
+        finally:
+            conn.close()
+
+    return _OFF_TAG_MAP_CACHE
 
 
 def add_synonym_to_db(allergen: str, synonym: str, language: str = "de"):

@@ -1,33 +1,34 @@
-# AllergyGuard 🛡️
+# AllergyGuard
 
-Eine intelligente Browser-Extension, die Rezepte & Lebensmittel auf Allergene prüft. Mit **5-stufiger Extraktionskaskade**, **3-Tier-Analysepipeline** und **lokaler KI** für vollständige Privatsphäre.
-
----
-
-## 📋 Übersicht
-
-**AllergyGuard** kombiniert moderne Web-Technologien mit lokaler KI-Analyse, um Allergiker beim sicheren Einkaufen und Kochen zu unterstützen.
-
-### 🏗️ Architektur (4 Komponenten)
-
-1. **🌐 Chrome Extension** (Manifest V3) — Intelligente Textextraktion von Webseiten
-2. **⚡ FastAPI Backend** (Python) — 3-Tier-Analysepipeline mit Caching
-3. **🗄️ OpenFoodFacts API** — Allergen-Datenbank für Barcode-Produkte
-4. **🤖 Ollama + Llama 3** — Lokale KI für AI-gestützte Analyse
-
-### ✨ Key Features
-
-- **🎯 Intelligente Extraktion**: 5-stufige Kaskade (JSON-LD → Microdata → CSS-Selektoren → Heading-Search → Fallback)
-- **🔬 Multi-Methoden-Analyse**: OpenFoodFacts (Barcodes) → Ollama (KI) → Synonym-Matching (Fallback)
-- **📊 14 Allergene**: Erdnuss, Milch, Ei, Gluten, Soja, Nüsse, Fisch, Sellerie, Senf, Sesam, Lupine, Weichtiere, Krebstiere, Sulfite
-- **💡 Smart Suggestions**: ~200 Ersatzvorschläge für gefundene Allergene
-- **📝 History**: Letzte 20 Prüfungen mit vollständigem Snapshot
-- **🔒 Privacy First**: Alle Daten bleiben lokal (nur Barcodes gehen zu OpenFoodFacts)
-- **⚡ Performance**: 7-Tage-Cache für OpenFoodFacts-Anfragen
+Eine Chrome-Extension mit FastAPI-Backend, die Rezepte und Lebensmittel-Produktseiten auf Allergene prüft. Die Analyse läuft in einer 3-Tier-Pipeline aus OpenFoodFacts-Abgleich, lokalem Synonym-Matching und lokaler KI (Ollama) als Fallback.
 
 ---
 
-## 🚀 Installation & Setup
+## Übersicht
+
+**AllergyGuard** kombiniert eine Browser-Extension zur Textextraktion mit einem Python-Backend, das Zutatentexte gegen die Allergien eines oder mehrerer Nutzerprofile prüft.
+
+### Architektur (4 Komponenten)
+
+1. **Chrome Extension** (Manifest V3) — Textextraktion von Rezept- und Produktseiten, Anzeige der Ergebnisse
+2. **FastAPI Backend** (Python) — 3-Tier-Analysepipeline, Nutzerverwaltung, Verlauf
+3. **OpenFoodFacts API** — Allergen-Daten für Produkte per Barcode oder Produktname
+4. **Ollama** (lokale KI, Default-Modell `mistral`) — Fallback-Analyse, falls OpenFoodFacts und Synonym-Matching nichts finden
+
+### Key Features
+
+- **Extraktions-Kaskade**: JSON-LD → Microdata → bekannte CSS-Selektoren → Heading-Suche → Fallback (kompletter Seitentext)
+- **3-Tier-Analyse**: OpenFoodFacts (Barcode/Produktname) und lokales Synonym-Matching laufen immer; Ollama greift nur, wenn beide nichts finden
+- **14 Allergene**: Erdnuss, Milch, Ei, Gluten, Soja, Nüsse, Fisch, Sellerie, Senf, Sesam, Lupine, Weichtiere, Krebstiere, Sulfite
+- **Über 1.200 Synonyme** in der lokalen Allergen-Datenbank, plus ~180 Ersatzvorschläge für gefundene Allergene
+- **Mehrere Profile gleichzeitig**: Beliebig viele Nutzerprofile anlegen, mehrere davon gleichzeitig aktivieren — ihre Allergien werden für die Prüfung kombiniert
+- **Verlauf**: Letzte 20 Prüfungen inkl. vollständigem Ergebnis-Snapshot
+- **Privacy**: Zutatentexte werden nur lokal (Backend + Ollama) verarbeitet; nur erkannte Barcodes/Produktnamen gehen an die OpenFoodFacts-API
+- **Caching**: OpenFoodFacts-Antworten werden 7 Tage lokal gecacht
+
+---
+
+## Installation & Setup
 
 ### Voraussetzungen
 
@@ -41,17 +42,15 @@ ollama --version
 # Chrome/Chromium Browser
 ```
 
-**Installation:**
 - **Python**: https://www.python.org/downloads/
 - **Ollama**: https://ollama.ai
 - **Chrome**: https://www.google.com/chrome/
 
 ---
 
-### 1️⃣ Backend Setup (Terminal 1)
+### 1. Backend Setup (Terminal 1)
 
 ```bash
-# In den Backend-Ordner wechseln
 cd backend
 
 # Virtual Environment erstellen (empfohlen)
@@ -60,257 +59,189 @@ source venv/bin/activate  # macOS/Linux
 # oder: venv\Scripts\activate  # Windows
 
 # Dependencies installieren
-pip install fastapi uvicorn requests
+pip install -r requirements.txt
 
 # FastAPI Server starten
 uvicorn main:app --reload --host 127.0.0.1 --port 8080
 ```
 
-**✅ Erfolg**: Server läuft auf `http://127.0.0.1:8080` — API-Docs unter `/docs` verfügbar
+**Erfolg**: Server läuft auf `http://127.0.0.1:8080` — API-Docs unter `/docs`.
 
-> **Hinweis**: Die Datenbank (`allergen.db`) wird beim ersten Start automatisch initialisiert.
+> Die Datenbank (`allergen.db`) sowie alle Tabellen werden beim ersten Start automatisch angelegt/migriert. Beim allerersten Start wird zudem ein Demo-Profil ("Demo", Allergie: Erdnuss) erstellt.
+
+Optional lässt sich das Verhalten über eine `.env`-Datei anpassen (siehe `backend/.env.example`), u. a. das verwendete Ollama-Modell, der Server-Port oder das OpenFoodFacts-Cache-TTL.
 
 ---
 
-### 2️⃣ Ollama Setup (Terminal 2)
+### 2. Ollama Setup (Terminal 2)
 
 ```bash
-# Ollama Server starten
 ollama serve
 ```
 
-**✅ Erfolg**: Server lauscht auf `[::]:11434`
+**Erfolg**: Server lauscht auf `[::]:11434`.
 
 ```bash
-# Llama 3 Model herunterladen (einmalig, ~4GB)
-ollama pull llama3
+# Standardmodell herunterladen (einmalig, ~4GB)
+ollama pull mistral
 ```
 
-> **Tipp**: Der erste Download dauert 5-10 Minuten. Danach ist das Modell lokal verfügbar.
+> Das Backend nutzt standardmäßig `mistral:latest` (konfigurierbar über die Umgebungsvariable `OLLAMA_MODEL` in `backend/.env`).
 
 ---
 
-### 3️⃣ Extension laden
+### 3. Extension laden
 
 1. Chrome öffnen → `chrome://extensions/`
 2. **"Developer mode"** (oben rechts) aktivieren
 3. **"Load unpacked"** klicken
 4. Ordner `extension/` auswählen
-5. ✅ AllergyGuard erscheint in der Chrome-Toolbar
+5. AllergyGuard erscheint in der Chrome-Toolbar
 
 ---
 
-## 🧪 Benutzung
+## Benutzung
 
-### Profil einrichten
+### Profil(e) einrichten
 
-1. Extension-Icon klicken
-2. Tab **"Profil"** öffnen
-3. Name eingeben
-4. Allergien auswählen (8 häufigste als Quick-Buttons, weitere in Liste)
-5. **"Speichern"** klicken
+1. Extension-Icon klicken → Tab **"Profil"**
+2. **"+ Neues Profil"** klicken, Name eingeben
+3. Allergien auswählen (aktuell per Klick auswählbar: Gluten, Milch, Erdnuss, Ei)
+4. Speichern
+5. Über die Checkbox neben jedem Profil festlegen, welche(s) Profil(e) aktuell für die Prüfung berücksichtigt werden sollen — bei mehreren aktiven Profilen werden deren Allergien kombiniert geprüft
 
-### Rezept prüfen (2 Methoden)
+### Rezept/Produkt prüfen (2 Methoden)
 
-#### **Methode 1: Automatischer Scan**
-1. Rezept-Website öffnen (z.B. Chefkoch.de, Rewe Rezepte)
-2. Extension-Icon klicken → Tab **"Scan"**
-3. **"🔍 Rezept prüfen"** klicken
-4. ⏳ Extension extrahiert automatisch Zutaten
-5. 📊 Ergebnis wird angezeigt
+**Methode 1: Automatischer Scan**
+1. Rezept- oder Produkt-Website öffnen
+2. Extension-Icon klicken → Tab **"Scan"** → **"Rezept prüfen"**
+3. Die Extension extrahiert automatisch den relevanten Text und zeigt das Ergebnis an
 
-#### **Methode 2: Manuelle Eingabe**
+**Methode 2: Manuelle Eingabe**
 1. Extension-Icon klicken → Tab **"Eingabe"**
-2. Zutatenliste ins Textfeld kopieren
-3. **"Prüfen"** klicken
-4. 📊 Ergebnis wird angezeigt
+2. Zutatenliste ins Textfeld einfügen → **"Prüfen"**
 
 ### Ergebnis verstehen
 
-**🚫 GEFAHR** (Rot)
-- Allergen wurde direkt gefunden
-- **Nicht sicher** für dein Profil
-- Zeigt: Synonym, Fundstelle, Ersatzvorschläge
-
-**⚠️ WARNUNG** (Gelb)
-- Spurenhinweise gefunden ("kann Spuren enthalten")
-- **Vorsicht geboten**
-
-**✅ SICHER** (Grün)
-- Keine Allergene gefunden
-- **Sicher** für dein Profil
+- **GEFAHR** (Rot) — Allergen wurde direkt in den Zutaten gefunden, nicht sicher für das geprüfte Profil; zeigt Synonym, Fundstelle und Ersatzvorschläge
+- **WARNUNG** (Gelb) — Nur Spurenhinweise gefunden ("kann Spuren enthalten" o. ä.), Vorsicht geboten
+- **SICHER** (Grün) — Keine Allergene gefunden
 
 ### Verlauf anzeigen
 
-- Tab **"Verlauf"** öffnet die letzten 20 Prüfungen
-- **Klick auf Eintrag** zeigt Details (expandierbar)
-- Farb-Dots zeigen Urteil (🔴 Gefahr, 🟡 Warnung, 🟢 Sicher)
+- Tab **"Verlauf"** zeigt die letzten 20 Prüfungen
+- Klick auf einen Eintrag zeigt die vollständigen Details
 
 ---
 
-## 🏛️ Architektur-Details
+## Architektur-Details
 
-### Extension: 5-Stufen-Extraktionskaskade
+### Extension: Extraktions-Kaskade
 
-Die Extension versucht in dieser Reihenfolge, Zutaten zu extrahieren:
+Die Extension versucht in dieser Reihenfolge, den relevanten Text zu extrahieren (`extension/scripts/extract.js`):
 
 1. **JSON-LD**: Strukturierte Recipe-Daten (`<script type="application/ld+json">`)
-2. **Microdata**: HTML5 Microdata mit `itemtype="http://schema.org/Recipe"`
-3. **Bekannte Selektoren**: 40+ CSS-Selektoren für populäre Rezept-Sites
-4. **Heading-basiert**: Suche nach "Zutaten"-Überschriften + folgende Listen
-5. **Fallback**: Titel + alle Listen + erste 5.000 Zeichen Body-Text
+2. **Microdata**: HTML5 Microdata mit `itemtype="...Recipe"`
+3. **Bekannte Selektoren**: CSS-Selektoren für Zutaten-, Allergen- und Produktbeschreibungs-Bereiche
+4. **Heading-basiert**: Sucht nach Überschriften wie "Zutaten"/"Allergene" und liest die folgenden Elemente
+5. **Fallback**: kompletter sichtbarer Seitentext
 
-**Nachverarbeitung**: Bereinigung, Deduplizierung, Kürzung auf 6.000 Zeichen
+Nachverarbeitung: Zeilen-Deduplizierung, Kürzung auf 6.000 (bzw. bis zu 10.000 im Fallback) Zeichen.
 
 ### Backend: 3-Tier-Analysepipeline
 
 ```
-1. OpenFoodFacts (Barcode-Suche)
-   ├─ Barcode im Text? → API-Call
+1. OpenFoodFacts (Tier 1)
+   ├─ Barcode im Text gefunden? → OFF-API-Abfrage
+   ├─ Sonst: Versuch, Produktnamen im Freitext zu erkennen
    ├─ Cache prüfen (7 Tage TTL)
-   ├─ allergen_tags & traces_tags abgleichen
-   └─ ❌ Kein Barcode → weiter zu 2.
+   └─ allergens_tags gegen Nutzerallergien abgleichen
 
-2. Ollama (KI-Analyse)
-   ├─ Prompt mit User-Allergenen
-   ├─ LLM antwortet mit JSON-Array
-   ├─ Enthält: allergie, synonym, fundstelle, ist_spur, ersatz
-   └─ ❌ Ollama nicht erreichbar → weiter zu 3.
+2. Lokales Synonym-Matching (Tier 2)
+   ├─ Läuft immer, unabhängig vom Ergebnis aus Tier 1
+   ├─ 14 Allergene, 1.200+ Synonyme aus der lokalen DB
+   ├─ Wortgrenzen-bewusstes Matching, False-Positive-Filter
+   │  (z. B. "Ei" in "Eisen", "Eiweiß" im Nährwert- statt Zutatenkontext)
+   └─ Spuren-Erkennung anhand von Formulierungen wie "kann Spuren enthalten"
 
-3. Synonym-Matching (Fallback)
-   ├─ ~900 Synonyme in 14 Sprachen/Varianten
-   ├─ Wortgrenzen-bewusste Suche
-   ├─ Spuren-Erkennung (±150 Zeichen Kontext)
-   └─ ✅ Immer verfügbar (keine externe Abhängigkeit)
+3. Ollama-KI (Tier 3, Fallback)
+   ├─ Wird nur angefragt, wenn Tier 1 UND Tier 2 nichts gefunden haben
+   ├─ Kurzer Prompt mit den Nutzerallergien + Zutatentext
+   └─ Ergebnis wird nachträglich gegen dieselben False-Positive-Filter geprüft
 ```
 
-### Datenbank (SQLite)
+### Datenbank (SQLite, `backend/allergen.db`)
 
-**3 Tabellen:**
-
-- `users`: Nutzer-Profile (Name + Allergien)
-- `history`: Letzte 20 Prüfungen + vollständiger JSON-Snapshot
-- `off_cache`: OpenFoodFacts-Responses (7 Tage TTL)
+- `users` — Profile (Name, Allergien als kommaseparierte Liste, `selected`-Flag für die aktive Prüfung)
+- `history` — letzte 20 Prüfungen inkl. vollständigem JSON-Snapshot
+- `allergen_synonyms` — Allergen ↔ Synonym-Zuordnungen (Wissensbasis für Tier 2)
+- `allergen_replacements` — Ersatzvorschläge je gefundenem Begriff
+- `off_tag_map` — Übersetzung von OpenFoodFacts-Tags (z. B. `en:peanuts`) auf interne Allergie-Namen
+- `off_products` — lokal bekannte OFF-Produkte (aus Barcode-Scans/Textsuchen)
+- `off_cache` — gecachte OpenFoodFacts-Antworten (7 Tage TTL)
 
 ---
 
-## 📁 Projektstruktur
+## Projektstruktur
 
 ```
 AllergyGuard/
 ├── backend/
-│   ├── allergen.db              # SQLite Datenbank
-│   ├── allergen_data.py         # 832 Zeilen: Synonyme, Tags, Ersatz
-│   ├── synonym_matcher.py       # 55 Zeilen: Lokales Matching
-│   ├── openfoodfacts_client.py  # 119 Zeilen: OFF API + Cache
-│   ├── ollama_client.py         # 38 Zeilen: KI-Client
-│   ├── main.py                  # 186 Zeilen: FastAPI Routes
-│   ├── config.py                # 17 Zeilen: Konstanten
-│   ├── database.py              # 48 Zeilen: DB-Init + Helfer
-│   └── models.py                # 11 Zeilen: Pydantic Models
+│   ├── allergen.db                # SQLite-Datenbank
+│   ├── main.py                    # FastAPI-Routen, 3-Tier-Pipeline
+│   ├── config.py                  # Konstanten & Umgebungsvariablen
+│   ├── database.py                # DB-Init/Migration + Verbindungs-Helfer
+│   ├── models.py                  # Pydantic-Models
+│   ├── allergen_db.py             # DB-Zugriff auf Synonyme/Ersatz/OFF-Tag-Map (In-Memory-Cache)
+│   ├── synonym_matcher.py         # Tier 2: lokales Synonym-Matching
+│   ├── text_filter.py             # Extrahiert Zutaten-Sektion aus Rohtext
+│   ├── filters.py                 # False-Positive-/Kontext-Filter
+│   ├── openfoodfacts_client.py    # Tier 1: OFF-API-Client + Cache
+│   ├── ollama_client.py           # Tier 3: Ollama-Client + Post-Filter
+│   ├── synonym_learner.py         # Optionales dynamisches Synonym-Lernen
+│   ├── import_data/                # Einmalige Import-/Migrationsskripte für die Synonym-DB (USDA-Quelldaten)
+│   └── tests/                     # pytest-Suite
 │
 ├── extension/
-│   ├── manifest.json            # Extension Config (Manifest V3)
-│   ├── popup.html               # UI mit Tabs + CSS
-│   ├── popup.js                 # Bootstrap + Event-Handler
+│   ├── manifest.json              # Extension-Konfiguration (Manifest V3)
+│   ├── popup.html                 # UI mit Tabs (Scan, Eingabe, Verlauf, Profil)
+│   ├── popup.js                   # Bootstrap + Event-Handler
 │   └── scripts/
-│       ├── namespace.js         # Globaler AllergyGuard-Namespace
-│       ├── extract.js           # 5-Stufen-Extraktionskaskade
-│       ├── render.js            # Result-Rendering (Banner, Funde)
-│       ├── api.js               # Backend-Kommunikation
-│       ├── history.js           # Verlauf mit Expand-Details
-│       └── profile.js           # Allergen-Picker (14 Allergene)
+│       ├── namespace.js           # Globaler AllergyGuard-Namespace + API-Basis-URL
+│       ├── extract.js             # Extraktions-Kaskade
+│       ├── api.js                 # Backend-Kommunikation
+│       ├── render.js              # Ergebnis-Rendering
+│       └── profile.js             # Profil-/Allergien-Verwaltung (Mehrfachauswahl)
 │
-├── docs/
-│   └── refactor-contract.md    # Refactor-Spezifikation
-│
-└── README.md                    # Diese Datei
+└── README.md
 ```
 
 ---
 
-## 🔬 Technische Details
+## API-Endpunkte
 
-### Wissensbasis (832 Zeilen)
+### `GET /users`
+Alle Profile inkl. `selected`-Status (welche gerade für die Prüfung aktiv sind).
 
-**ALLERGEN_SYNONYME**: 14 Allergene × ~60 Synonyme
-- Deutsch, Englisch, Lateinisch
-- Versteckte Quellen (z.B. "Satay" bei Erdnuss, "Worcestersauce" bei Fisch)
-
-**OFF_TAG_MAP**: Übersetzt OpenFoodFacts-Tags
-- `en:peanuts` → `erdnuss`
-- `en:milk` → `milch`
-- etc.
-
-**ERSATZ**: ~200 Ersatzvorschläge
-- `Eigelb` → Leinsamengel, Aquafaba, Apfelmus
-- `Butter` → Margarine, Kokosöl, Avocado
-- etc.
-
-### Spuren-Erkennung
-
-**SPUREN_PHRASEN**: 7 Formulierungen
-- "kann Spuren enthalten"
-- "kann Spuren von ... enthalten"
-- "möglicherweise ... enthalten"
-- etc.
-
-**Kontext-Analyse**: ±150 Zeichen um Fund herum prüfen
-
-### Performance-Optimierungen
-
-- **OpenFoodFacts Cache**: 7 Tage TTL, reduziert API-Calls
-- **History-Limit**: Max. 20 Einträge, älteste werden gelöscht
-- **Text-Limit**: 6.000 Zeichen pro Analyse
-- **Wortgrenzen-Matching**: Verhindert False Positives (z.B. "Ei" in "Eisen")
-
----
-
-## 🛠️ Entwicklung
-
-### Backend Tests
-
-```bash
-cd backend
-source venv/bin/activate
-
-# Module-Import testen
-python -c "import main; print('✅ Backend OK')"
-
-# Syntax-Checks
-python -m py_compile *.py
-```
-
-### Extension Tests
-
-```bash
-cd extension/scripts
-
-# JavaScript-Syntax prüfen
-for f in *.js; do node --check "$f"; done
-```
-
----
-
-## 📝 API-Endpunkte
-
-### `GET /profile`
-Lädt gespeichertes Profil (erster User)
-
-**Response**: `{"name": "Max", "allergy": "Erdnuss,Milch"}`
-
-### `POST /profile`
-Speichert Profil
-
+### `POST /users`
+Legt ein neues Profil an (standardmäßig aktiv).
 **Body**: `{"name": "Max", "allergy": "Erdnuss,Milch"}`
 
-### `GET /history`
-Lädt letzte 20 Prüfungen
+### `PUT /users/{user_id}`
+Aktualisiert Name/Allergien eines Profils.
 
-**Response**: `[{...}, {...}]` (mit `result_snapshot` für Details)
+### `DELETE /users/{user_id}`
+Löscht ein Profil.
+
+### `PATCH /users/{user_id}/selection`
+Aktiviert/deaktiviert ein Profil für die Prüfung.
+**Body**: `{"selected": true}`
+
+### `GET /history`
+Lädt die letzten 20 Prüfungen.
 
 ### `POST /check-recipe`
-Analysiert Rezept/Zutaten
+Analysiert einen Zutatentext gegen die Allergien aller aktuell aktiven Profile.
 
 **Body**: `{"ingredients": "250g Erdnussbutter...", "source": "chefkoch.de"}`
 
@@ -322,7 +253,7 @@ Analysiert Rezept/Zutaten
   "urteil": "GEFAHR",
   "gefundenes_synonym": "Erdnussbutter",
   "fundstelle": "250g Erdnussbutter, cremig",
-  "grund": "Direkte Allergene: Erdnuss. (via synonym)",
+  "grund": "Direkt gefunden: Erdnuss. (via synonym)",
   "methode": "synonym",
   "alle_funde": [
     {
@@ -338,32 +269,47 @@ Analysiert Rezept/Zutaten
 
 ---
 
-## 🤝 Contributing
+## Data Sources & Licenses
 
-Dies ist ein Prototyp für das Modul "Serverseitige Technologien". Verbesserungsvorschläge willkommen!
+This project uses foundational data sourced from the **USDA Food Data Central** database to power the local synonym matching.
 
-### Roadmap-Ideen
-- [ ] Browser-kompatibilität (Firefox, Edge)
-- [ ] Mehr Sprachen (EN, FR, IT)
-- [ ] Offline-Modus (alle Daten lokal)
-- [ ] Mobile App Version
-- [ ] Export/Import von Profilen
+- **Source:** USDA Food Database (~10,000 categorized ingredients)
+- **License:** [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0)
+- **Modifications:** The original dataset was cleaned, filtered for 16 major allergen categories, and adapted specifically for local allergen detection in this prototype.
 
----
-
-## 📄 Lizenz
-
-MIT License — Projekt entwickelt im Rahmen des Studiums.
+In addition, product/barcode lookups at runtime are powered by the **OpenFoodFacts** database (https://world.openfoodfacts.org), queried live via their public API and cached locally for 7 days. OpenFoodFacts data is community-contributed and licensed under the [Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/).
 
 ---
 
-## 🙏 Credits
+## Entwicklung
+
+### Backend Tests
+
+```bash
+cd backend
+source venv/bin/activate
+pip install -r requirements-dev.txt
+pytest
+```
+
+### Extension Syntax-Check
+
+```bash
+cd extension/scripts
+for f in *.js; do node --check "$f"; done
+```
+
+CI führt beide Checks bei jedem Push/PR auf `main` aus (`.github/workflows/tests.yml`).
+
+---
+
+## Lizenz
+
+Prototyp, entwickelt im Rahmen des Studiums (Modul "Serverseitige Technologien"). Für die verwendeten Fremddaten gelten die oben genannten Lizenzen (USDA/Apache 2.0, OpenFoodFacts/ODbL).
+
+## Credits
 
 - **OpenFoodFacts**: https://world.openfoodfacts.org
+- **USDA Food Data Central**: https://fdc.nal.usda.gov
 - **Ollama**: https://ollama.ai
-- **Llama 3**: Meta AI
 - **FastAPI**: https://fastapi.tiangolo.com
-
----
-
-**Made with 💚 for Allergiker**

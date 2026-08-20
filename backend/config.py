@@ -23,24 +23,27 @@ SPUREN_PHRASEN = [
 # --> habe diesen Regex mit Claude erstellt, darauf bei "KI Nutzung" verweisen
 SPUREN_MUSTER = r'kann\s+.{0,60}?enthalten'
 
+# Umgebungsvariablen, wenn keine mit os.getenv gefunden, dann default werte dahinter
+
+# Cache von OFF - wie lage behalten
 OFF_CACHE_TTL_DAYS = int(os.getenv("OFF_CACHE_TTL_DAYS", "7"))
+
+# Wo läuft Ollama & welches Modell
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "mistral:latest")
 
-# Database
+# Wo liegt unsere DB
 DATABASE_PATH = os.getenv("DATABASE_PATH", "allergen.db")
 
-# Server
+# IP und Port für FastAPI Server
 SERVER_HOST = os.getenv("SERVER_HOST", "127.0.0.1")
 SERVER_PORT = int(os.getenv("SERVER_PORT", "8080"))
 
-# Logging
+# Log Level (Info vs Debug (debug mehr detail!))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
-# Kurze Begriffe die Wortgrenzen brauchen um Falschpositive zu vermeiden
-# z.B. "ei" soll nicht "Zwiebel", "Eisen", "Protein" treffen
-# "bier" soll nicht "Probieren" treffen, "teig" nicht "teigige"
-# "brot" nicht in "Brotaufstrich" (Produkttyp, keine Zutat)
+# Kurze Begriffe, die nur an Wortgrenzen gematcht werden sollen (z.B. "Ei" in "Eiweiß" = kein Treffer)
+# Evtl später raus aus config.py???
 WORTGRENZE_SYNONYME = {
     "ei", "eier", "nut", "nuts", "cod", "rye", "oat", "oats", "malt",
     "crab", "bass", "clam", "aal", "feta", "brie",

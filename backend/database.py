@@ -1,13 +1,14 @@
 import sqlite3
 from config import DATABASE_PATH
 
-
+# Verbindung herstellen
 def db():
     conn = sqlite3.connect(DATABASE_PATH)
-    conn.row_factory = sqlite3.Row
+    conn.row_factory = sqlite3.Row #?
     return conn
 
-
+# Aufgerufen bei Serverstart, um DB zu initialisieren
+# (Tabellen erstellen wenn nicht vorhanden, evtl Spalten hinzufügen)
 def init_db():
     conn = db()
     conn.execute('''
@@ -40,19 +41,19 @@ def init_db():
         )
     ''')
     
-    # Neue Tabelle für dynamisch gelernte Synonyme
-    conn.execute('''
-        CREATE TABLE IF NOT EXISTS learned_synonyms (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            allergen TEXT NOT NULL,
-            synonym TEXT NOT NULL,
-            quelle TEXT NOT NULL,
-            confidence INTEGER DEFAULT 1,
-            first_seen TEXT NOT NULL,
-            last_seen TEXT NOT NULL,
-            UNIQUE(allergen, synonym)
-        )
-    ''')
+    # Tabelle für dynamisch gelernte Synonyme --> deaktiviert bis bugfix im synonym_learner.py...
+    #conn.execute('''
+    #    CREATE TABLE IF NOT EXISTS learned_synonyms (
+    #        id INTEGER PRIMARY KEY AUTOINCREMENT,
+    #        allergen TEXT NOT NULL,
+    #        synonym TEXT NOT NULL,
+    #        quelle TEXT NOT NULL,
+    #        confidence INTEGER DEFAULT 1,
+    #        first_seen TEXT NOT NULL,
+    #        last_seen TEXT NOT NULL,
+    #        UNIQUE(allergen, synonym)
+    #    )
+    #''')
     
     # Tabelle für Allergen-Synonyme (Migration von allergen_data.py)
     conn.execute('''
@@ -67,7 +68,7 @@ def init_db():
         )
     ''')
     
-    # Index für schnelle Suche
+    # Index für schnellere Suche
     conn.execute('''
         CREATE INDEX IF NOT EXISTS idx_synonym_search 
         ON allergen_synonyms(synonym, allergen)
@@ -84,8 +85,18 @@ def init_db():
         )
     ''')
 
+    # OpenFoodFacts-Allergen-Tags (z.B. "en:peanuts") -> unser interner
+    # Allergie-Name (z.B. "erdnuss") -- fertig migriert von allergen_data.py,
+    # damit openfoodfacts_client.py keine Python-Datei mehr importieren muss
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS off_tag_map (
+            off_tag TEXT PRIMARY KEY,
+            allergen TEXT NOT NULL
+        )
+    ''')
+
     # Lokal bekannte OFF-Produkte (wächst durch Barcode-Scans & verifizierte
-    # Textsuchen, statt bei jedem Scan die OFF-Volltextsuche blind zu befragen)
+    # Textsuchen, statt bei jedem Scan die OFF-Volltextsuche sofort zu befragen)
     conn.execute('''
         CREATE TABLE IF NOT EXISTS off_products (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -103,6 +114,9 @@ def init_db():
         ON off_products(produktname_normalisiert)
     ''')
 
+    # Migration: Spalten zu history & users hinzufügen, falls noch nicht vorhanden
+    # --> das hier ist nur für unseren dev prozess, 
+    # weil manche von uns evtl noch die alten DBs haben
     cols = [r[1] for r in conn.execute("PRAGMA table_info(history)").fetchall()]
     if "methode" not in cols:
         conn.execute("ALTER TABLE history ADD COLUMN methode TEXT")
@@ -113,11 +127,17 @@ def init_db():
     if "selected" not in user_cols:
         conn.execute("ALTER TABLE users ADD COLUMN selected INTEGER NOT NULL DEFAULT 0")
 
+    # Initialles Setup, damit nicht leer
+
+    # Wenn keine Nutzer vorhanden, Demo Nutzer erstellen
     if not conn.execute('SELECT 1 FROM users LIMIT 1').fetchone():
         conn.execute("INSERT INTO users (name, allergy, selected) VALUES ('Demo', 'Erdnuss', 1)")
+    # Wenn keine Nutzer AUSGEWÄHLT, den ersten wählen
     elif not conn.execute('SELECT 1 FROM users WHERE selected=1').fetchone():
         # Migrating an older single-profile DB: keep existing behavior by selecting the first user
         first_id = conn.execute('SELECT id FROM users ORDER BY id LIMIT 1').fetchone()["id"]
         conn.execute('UPDATE users SET selected=1 WHERE id=?', (first_id,))
+
+    
     conn.commit()
     conn.close()

@@ -1,13 +1,15 @@
 """One-time migration script: allergen_data.py → SQLite
 
-This script migrates allergen synonyms and replacement suggestions
-from hardcoded Python dictionaries to the database.
+This script migrates allergen synonyms, replacement suggestions and the
+OpenFoodFacts-Tag-Zuordnung from hardcoded Python dictionaries to the
+database. allergen_data.py ist danach reine Migrations-Altdaten, nichts
+davon wird zur Laufzeit noch direkt importiert.
 
-Run once: python migrate_allergens.py
+Run once (aus backend/, nicht aus import_data/!): python import_data/migrate_allergens.py
 """
 
 import sqlite3
-from allergen_data import ALLERGEN_SYNONYME, ERSATZ
+from allergen_data import ALLERGEN_SYNONYME, ERSATZ, OFF_TAG_MAP
 
 
 def detect_language(text: str) -> str:
@@ -132,6 +134,40 @@ def migrate_replacements():
     return total
 
 
+def migrate_off_tag_map():
+    """Migrate OFF-Tag -> Allergie-Name Zuordnung from Python dict to database"""
+    conn = sqlite3.connect("allergen.db")
+    cursor = conn.cursor()
+
+    print("\n[MIGRATING] OFF tag map...")
+    print(f"   Source: {len(OFF_TAG_MAP)} tags")
+
+    total = 0
+    skipped = 0
+
+    for off_tag, allergen in OFF_TAG_MAP.items():
+        try:
+            cursor.execute("""
+                INSERT OR IGNORE INTO off_tag_map (off_tag, allergen)
+                VALUES (?, ?)
+            """, (off_tag, allergen))
+
+            if cursor.rowcount > 0:
+                total += 1
+            else:
+                skipped += 1
+
+        except sqlite3.IntegrityError:
+            skipped += 1
+
+    conn.commit()
+    conn.close()
+
+    print(f"[OK] Migrated {total} OFF tags (skipped {skipped} duplicates)")
+
+    return total
+
+
 def verify_migration():
     """Verify that migration was successful"""
     conn = sqlite3.connect("allergen.db")
@@ -157,13 +193,17 @@ def verify_migration():
     
     cursor.execute("SELECT COUNT(*) FROM allergen_replacements")
     total_replacements = cursor.fetchone()[0]
-    
+
+    cursor.execute("SELECT COUNT(*) FROM off_tag_map")
+    total_off_tags = cursor.fetchone()[0]
+
     conn.close()
-    
+
     print(f"\n   Total synonyms in DB: {total_synonyms}")
     print(f"   Total replacements in DB: {total_replacements}")
-    
-    return total_synonyms > 0 and total_replacements > 0
+    print(f"   Total OFF tags in DB: {total_off_tags}")
+
+    return total_synonyms > 0 and total_replacements > 0 and total_off_tags > 0
 
 
 if __name__ == "__main__":
@@ -177,17 +217,13 @@ if __name__ == "__main__":
         # Run migrations
         synonym_count = migrate_synonyms()
         replacement_count = migrate_replacements()
-        
+        off_tag_count = migrate_off_tag_map()
+
         # Verify
         if verify_migration():
             print("\n" + "=" * 60)
             print("[OK] Migration completed successfully!")
             print("=" * 60)
-            print()
-            print("Next steps:")
-            print("  1. Update synonym_matcher.py to use allergen_db")
-            print("  2. Update main.py to load cache at startup")
-            print("  3. Clean up allergen_data.py (keep only OFF_TAG_MAP)")
             print()
         else:
             print("\n[ERROR] Migration verification failed!")

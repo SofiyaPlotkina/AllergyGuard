@@ -44,7 +44,7 @@ load_synonyms_into_cache()
 def list_users():
 
 
-    #Zeigt alle Nutzerprofile an, plus welche gerade aktiviert sind (selected Spalte). 
+    # Lädt alle Nutzerprofile, plus welche gerade aktiviert sind (selected Spalte). 
     # Es können hier mehrere auf einmal aktiviert sein, deren Allergene werden kombiniert geprüft dann
 
 
@@ -198,10 +198,10 @@ def check_recipe(request: RecipeRequest):
             logger.info(f"{len(off_funde)} allergens found in OFF!")
 
             # Lerne aus OFF ingredients_text
-            for allergie in allergien:
-                lerne_von_off_ingredients(produkt, allergie)
-        else:
-            logger.warning("Product found, but no allergens in OFF-DB")
+    #        for allergie in allergien:
+    #            lerne_von_off_ingredients(produkt, allergie)
+    #    else:
+    #        logger.warning("Product found, but no allergens in OFF-DB")
 
     # TIER 2: Lokale Synonym DB
     # Läuft immer, auch wenn in Tier 1 etwas gefunden
