@@ -376,10 +376,10 @@ def check_recipe(request: RecipeRequest):
     # ── Verlauf speichern ─────────────────────────────────────────────────────
     conn = db()
     conn.execute(
-        '''INSERT INTO history
-           (timestamp, source, urteil, allergie_geprueft, gefundenes_synonym, fundstelle, grund, methode, result_snapshot)
-           VALUES (?,?,?,?,?,?,?,?,?)''',
-        (
+        '''#INSERT INTO history
+           #(timestamp, source, urteil, allergie_geprueft, gefundenes_synonym, fundstelle, grund, methode, result_snapshot)
+           #VALUES (?,?,?,?,?,?,?,?,?),
+        '''(
             datetime.datetime.now().isoformat(),
             request.source or "Unbekannt",
             urteil, user_allergy,
@@ -388,9 +388,9 @@ def check_recipe(request: RecipeRequest):
         )
     )
     conn.execute('''
-        DELETE FROM history WHERE id NOT IN (
-            SELECT id FROM history ORDER BY timestamp DESC LIMIT 20
-        )
+        #DELETE FROM history WHERE id NOT IN (
+            #SELECT id FROM history ORDER BY timestamp DESC LIMIT 20
+        #)
     ''')
     conn.commit()
     conn.close()
