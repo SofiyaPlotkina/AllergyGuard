@@ -8,8 +8,7 @@ import requests
 import logging
 from typing import Optional
 
-from allergen_data import OFF_TAG_MAP
-from allergen_db import get_replacement_for_term
+from allergen_db import get_replacement_for_term, get_off_tag_map
 
 logger = logging.getLogger(__name__)
 from config import OFF_CACHE_TTL_DAYS
@@ -367,7 +366,7 @@ def off_allergene_pruefen(produkt: dict, user_allergien: list[str]) -> list[dict
 
     for allergie in user_allergien:
         # Prüfen ob ein OFF-Tag zu dieser Allergie passt
-        for tag, schluessel in OFF_TAG_MAP.items():
+        for tag, schluessel in get_off_tag_map().items():
             if schluessel != allergie.lower().strip() and schluessel not in allergie.lower():
                 continue
             if tag in allergen_tags:

@@ -4,6 +4,9 @@ import sys
 import pytest
 
 sys.path.insert(0, os.path.dirname(__file__))
+# allergen_data.py ist reine Migrations-Altdaten und liegt deshalb in import_data/,
+# wird aber von tests/test_allergen_data.py noch direkt importiert
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "import_data"))
 
 
 @pytest.fixture(autouse=True)

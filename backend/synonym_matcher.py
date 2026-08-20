@@ -1,4 +1,4 @@
-"""Synonym matching functionality for allergen detection."""
+"""Synonym Matcher zur Allergenfindung"""
 
 import re
 import logging
@@ -13,13 +13,13 @@ logger = logging.getLogger(__name__)
 
 def synonyme_fuer(allergen: str) -> list[str]:
     """
-    Gibt die Liste der Synonyme für ein Allergen zurück.
-    Kombiniert DB-Synonyme + dynamisch gelernte.
+    Sammelt alle bekannten Begriffe für ein Allergen (zB "Gluten" = "Weizen", "Roggen", "Gerste", ...)
+    Erst feste aus DB, dann dynamisch gelernte
     """
     key = allergen.lower().strip()
     synonyme = []
     
-    # 1. Synonyme aus Datenbank (migriert von allergen_data.py)
+    # Holt statische Synonyme aus der DB
     ALLERGEN_SYNONYME = get_all_allergen_synonyms()
     
     if key in ALLERGEN_SYNONYME:
@@ -29,7 +29,7 @@ def synonyme_fuer(allergen: str) -> list[str]:
             if k in key or key in k:
                 synonyme.extend(syns)
     
-    # 2. Dynamisch gelernte Synonyme aus DB
+    # 2. Holt dynamisch gelernte Synonyme
     try:
         from synonym_learner import hole_gelernte_synonyme
         learned = hole_gelernte_synonyme(allergen)
@@ -43,7 +43,10 @@ def synonyme_fuer(allergen: str) -> list[str]:
 
 
 def synonym_trifft(synonym: str, text_lower: str) -> bool:
-    """Prüft ob ein Synonym im Text vorkommt; kurze Begriffe nur an Wortgrenzen."""
+    """
+    Prüft ob ein Synonym im Text vorkommt; kurze Begriffe nur an Wortgrenzen, 
+    weil zB sonst "Ei" in "Weizen"  oder "Zwiebel"
+    """
     if synonym in WORTGRENZE_SYNONYME or len(synonym) <= 3:
         pattern = r'(?<![a-zäöüß])' + re.escape(synonym) + r'(?![a-zäöüß])'
         return bool(re.search(pattern, text_lower))
