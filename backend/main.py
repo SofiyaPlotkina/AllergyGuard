@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+'''from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import datetime
 import json
@@ -404,3 +404,4 @@ if __name__ == "__main__":
     
     logger.info(f"Starting AllergyGuard server on {SERVER_HOST}:{SERVER_PORT}")
     uvicorn.run(app, host=SERVER_HOST, port=SERVER_PORT)
+'''
